@@ -1126,7 +1126,6 @@ impl CubeScanWrapperNode {
                                 })?
                                 .clone();
                             let (projection, sql) = Self::generate_column_expr(
-                                plan.clone(),
                                 schema.clone(),
                                 projection_expr.clone(),
                                 sql,
@@ -1140,7 +1139,6 @@ impl CubeScanWrapperNode {
                             .await?;
                             let flat_group_expr = extract_exprlist_from_groupping_set(&group_expr);
                             let (group_by, sql) = Self::generate_column_expr(
-                                plan.clone(),
                                 schema.clone(),
                                 flat_group_expr.clone(),
                                 sql,
@@ -1154,7 +1152,6 @@ impl CubeScanWrapperNode {
                             .await?;
                             let group_descs = extract_group_type_from_groupping_set(&group_expr)?;
                             let (aggregate, sql) = Self::generate_column_expr(
-                                plan.clone(),
                                 schema.clone(),
                                 aggr_expr.clone(),
                                 sql,
@@ -1168,7 +1165,6 @@ impl CubeScanWrapperNode {
                             .await?;
 
                             let (filter, sql) = Self::generate_column_expr(
-                                plan.clone(),
                                 schema.clone(),
                                 filter_expr.clone(),
                                 sql,
@@ -1182,7 +1178,6 @@ impl CubeScanWrapperNode {
                             .await?;
 
                             let (window, sql) = Self::generate_column_expr(
-                                plan.clone(),
                                 schema.clone(),
                                 window_expr.clone(),
                                 sql,
@@ -1196,7 +1191,6 @@ impl CubeScanWrapperNode {
                             .await?;
 
                             let (order, mut sql) = Self::generate_column_expr(
-                                plan.clone(),
                                 schema.clone(),
                                 order_expr.clone(),
                                 sql,
@@ -1224,7 +1218,6 @@ impl CubeScanWrapperNode {
                                 {
                                     // Need to call generate_column_expr to apply column_remapping
                                     let (join_condition, new_sql) = Self::generate_column_expr(
-                                        plan.clone(),
                                         schema.clone(),
                                         [condition.clone()],
                                         sql,
@@ -1511,7 +1504,6 @@ impl CubeScanWrapperNode {
     }
 
     async fn generate_column_expr(
-        _plan: Arc<Self>,
         schema: DFSchemaRef,
         exprs: impl IntoIterator<Item = Expr>,
         mut sql: SqlQuery,
