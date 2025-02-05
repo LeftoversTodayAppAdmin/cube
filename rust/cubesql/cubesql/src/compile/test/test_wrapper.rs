@@ -1261,26 +1261,35 @@ async fn test_wrapper_filter_flatten() {
             measures: Some(vec![json!({
                 "cubeName": "KibanaSampleDataEcommerce",
                 "alias": "sum_kibanasample",
-                "cubeParams": ["KibanaSampleDataEcommerce"],
-                // This is grouped query, KibanaSampleDataEcommerce.sumPrice is correct in this context
-                // SUM(sumPrice) will be incrrect here, it would lead to SUM(SUM(sql)) in generated query
-                "expr": "${KibanaSampleDataEcommerce.sumPrice}",
+                "expr": {
+                    "type": "SqlFunction",
+                    "cubeParams": ["KibanaSampleDataEcommerce"],
+                    // This is grouped query, KibanaSampleDataEcommerce.sumPrice is correct in this context
+                    // SUM(sumPrice) will be incrrect here, it would lead to SUM(SUM(sql)) in generated query
+                    "sql": "${KibanaSampleDataEcommerce.sumPrice}",
+                },
                 "groupingSet": null,
             })
             .to_string(),]),
             dimensions: Some(vec![json!({
                 "cubeName": "KibanaSampleDataEcommerce",
                 "alias": "customer_gender",
-                "cubeParams": ["KibanaSampleDataEcommerce"],
-                "expr": "${KibanaSampleDataEcommerce.customer_gender}",
+                "expr": {
+                    "type": "SqlFunction",
+                    "cubeParams": ["KibanaSampleDataEcommerce"],
+                    "sql": "${KibanaSampleDataEcommerce.customer_gender}",
+                },
                 "groupingSet": null,
             })
             .to_string(),]),
             segments: Some(vec![json!({
                 "cubeName": "KibanaSampleDataEcommerce",
                 "alias": "lower_kibanasamp",
-                "cubeParams": ["KibanaSampleDataEcommerce"],
-                "expr": "(LOWER(${KibanaSampleDataEcommerce.customer_gender}) = $0$)",
+                "expr": {
+                    "type": "SqlFunction",
+                    "cubeParams": ["KibanaSampleDataEcommerce"],
+                    "sql": "(LOWER(${KibanaSampleDataEcommerce.customer_gender}) = $0$)",
+                },
                 "groupingSet": null,
             })
             .to_string(),]),

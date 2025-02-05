@@ -7228,8 +7228,11 @@ ORDER BY
             json!({
                 "cubeName": cube,
                 "alias": alias,
-                "cubeParams": [cube],
-                "expr": format!("${{{cube}.{member}}}"),
+                "expr": {
+                    "type": "SqlFunction",
+                    "cubeParams": [cube],
+                    "sql": format!("${{{cube}.{member}}}"),
+                },
                 "groupingSet": null,
             })
             .to_string()
@@ -7245,32 +7248,44 @@ ORDER BY
                     json!({
                         "cubeName": "WideCube",
                         "alias": "max_source_measu",
-                        "cubeParams": ["WideCube"],
-                        "expr": "${WideCube.measure1}",
+                        "expr": {
+                            "type": "SqlFunction",
+                            "cubeParams": ["WideCube"],
+                            "sql": "${WideCube.measure1}",
+                        },
                         "groupingSet": null,
                     })
                     .to_string(),
                     json!({
                         "cubeName": "WideCube",
                         "alias": "max_source_measu_1",
-                        "cubeParams": ["WideCube"],
-                        "expr": "${WideCube.measure2}",
+                        "expr": {
+                            "type": "SqlFunction",
+                            "cubeParams": ["WideCube"],
+                            "sql": "${WideCube.measure2}",
+                        },
                         "groupingSet": null,
                     })
                     .to_string(),
                     json!({
                         "cubeName": "WideCube",
                         "alias": "sum_source_measu",
-                        "cubeParams": ["WideCube"],
-                        "expr": "${WideCube.measure3}",
+                        "expr": {
+                            "type": "SqlFunction",
+                            "cubeParams": ["WideCube"],
+                            "sql": "${WideCube.measure3}",
+                        },
                         "groupingSet": null,
                     })
                     .to_string(),
                     json!({
                         "cubeName": "WideCube",
                         "alias": "max_source_measu_2",
-                        "cubeParams": ["WideCube"],
-                        "expr": "${WideCube.measure4}",
+                        "expr": {
+                            "type": "SqlFunction",
+                            "cubeParams": ["WideCube"],
+                            "sql": "${WideCube.measure4}",
+                        },
                         "groupingSet": null,
                     })
                     .to_string(),
@@ -7282,8 +7297,11 @@ ORDER BY
                     json!({
                         "cubeName": "WideCube",
                         "alias": "pivot_grouping",
-                        "cubeParams": ["WideCube"],
-                        "expr": "0",
+                        "expr": {
+                            "type": "SqlFunction",
+                            "cubeParams": ["WideCube"],
+                            "sql": "0",
+                        },
                         "groupingSet": null,
                     })
                     .to_string()
@@ -11807,8 +11825,11 @@ ORDER BY "source"."str0" ASC
                     json!({
                         "cubeName": "KibanaSampleDataEcommerce",
                         "alias": "ta_1_order_date_",
-                        "cubeParams": ["KibanaSampleDataEcommerce", "Logs"],
-                        "expr": "((${KibanaSampleDataEcommerce.order_date} = DATE('1994-05-01')) OR (${KibanaSampleDataEcommerce.order_date} = DATE('1996-05-03')))",
+                        "expr": {
+                            "type": "SqlFunction",
+                            "cubeParams": ["KibanaSampleDataEcommerce", "Logs"],
+                            "sql": "((${KibanaSampleDataEcommerce.order_date} = DATE('1994-05-01')) OR (${KibanaSampleDataEcommerce.order_date} = DATE('1996-05-03')))",
+                        },
                         "groupingSet": null,
                     }).to_string(),
                 ]),
@@ -11816,8 +11837,11 @@ ORDER BY "source"."str0" ASC
                     json!({
                         "cubeName": "KibanaSampleDataEcommerce",
                         "alias": "lower_ta_2_conte",
-                        "cubeParams": ["KibanaSampleDataEcommerce", "Logs"],
-                        "expr": "(LOWER(${Logs.content}) = $0$)",
+                        "expr": {
+                            "type": "SqlFunction",
+                            "cubeParams": ["KibanaSampleDataEcommerce", "Logs"],
+                            "sql": "(LOWER(${Logs.content}) = $0$)",
+                        },
                         "groupingSet": null,
                     }).to_string(),
                 ]),
@@ -12088,22 +12112,31 @@ ORDER BY "source"."str0" ASC
                     json!({
                         "cubeName": "KibanaSampleDataEcommerce",
                         "alias": "customer_gender",
-                        "cubeParams": ["KibanaSampleDataEcommerce"],
-                        "expr": "${KibanaSampleDataEcommerce.customer_gender}",
+                        "expr": {
+                            "type": "SqlFunction",
+                            "cubeParams": ["KibanaSampleDataEcommerce"],
+                            "sql": "${KibanaSampleDataEcommerce.customer_gender}",
+                        },
                         "groupingSet": null,
                     }).to_string(),
                     json!({
                         "cubeName": "KibanaSampleDataEcommerce",
                         "alias": "cast_dateadd_utf",
-                        "cubeParams": ["KibanaSampleDataEcommerce"],
-                        "expr": "CAST(DATE_ADD(${KibanaSampleDataEcommerce.order_date}, INTERVAL '2 DAY') AS DATE)",
+                        "expr": {
+                            "type": "SqlFunction",
+                            "cubeParams": ["KibanaSampleDataEcommerce"],
+                            "sql": "CAST(DATE_ADD(${KibanaSampleDataEcommerce.order_date}, INTERVAL '2 DAY') AS DATE)",
+                        },
                         "groupingSet": null,
                     }).to_string(),
                     json!({
                         "cubeName": "KibanaSampleDataEcommerce",
                         "alias": "dateadd_utf8__se",
-                        "cubeParams": ["KibanaSampleDataEcommerce"],
-                        "expr": "DATE_ADD(${KibanaSampleDataEcommerce.order_date}, INTERVAL '2000000 MILLISECOND')",
+                        "expr": {
+                            "type": "SqlFunction",
+                            "cubeParams": ["KibanaSampleDataEcommerce"],
+                            "sql": "DATE_ADD(${KibanaSampleDataEcommerce.order_date}, INTERVAL '2000000 MILLISECOND')",
+                        },
                         "groupingSet": null,
                     }).to_string(),
                 ]),
@@ -12111,8 +12144,11 @@ ORDER BY "source"."str0" ASC
                     json!({
                         "cubeName": "KibanaSampleDataEcommerce",
                         "alias": "dateadd_utf8__da",
-                        "cubeParams": ["KibanaSampleDataEcommerce"],
-                        "expr": "(DATE_ADD(${KibanaSampleDataEcommerce.order_date}, INTERVAL '2 DAY') < DATE('2014-06-02'))",
+                        "expr": {
+                            "type": "SqlFunction",
+                            "cubeParams": ["KibanaSampleDataEcommerce"],
+                            "sql": "(DATE_ADD(${KibanaSampleDataEcommerce.order_date}, INTERVAL '2 DAY') < DATE('2014-06-02'))",
+                        },
                         "groupingSet": null,
                     }).to_string(),
                 ]),
@@ -12909,8 +12945,11 @@ ORDER BY "source"."str0" ASC
                     json!({
                         "cubeName": "KibanaSampleDataEcommerce",
                         "alias": "avg_kibanasample",
-                        "cubeParams": ["KibanaSampleDataEcommerce"],
-                        "expr": "${KibanaSampleDataEcommerce.avgPrice}",
+                        "expr": {
+                            "type": "SqlFunction",
+                            "cubeParams": ["KibanaSampleDataEcommerce"],
+                            "sql": "${KibanaSampleDataEcommerce.avgPrice}",
+                        },
                         "groupingSet": null,
                     }).to_string(),
                 ]),
@@ -12918,8 +12957,11 @@ ORDER BY "source"."str0" ASC
                     json!({
                         "cubeName": "KibanaSampleDataEcommerce",
                         "alias": "cast_kibanasampl",
-                        "cubeParams": ["KibanaSampleDataEcommerce"],
-                        "expr": "CAST(${KibanaSampleDataEcommerce.order_date} AS DATE)",
+                        "expr": {
+                            "type": "SqlFunction",
+                            "cubeParams": ["KibanaSampleDataEcommerce"],
+                            "sql": "CAST(${KibanaSampleDataEcommerce.order_date} AS DATE)",
+                        },
                         "groupingSet": null,
                     }).to_string(),
                 ]),
@@ -12927,8 +12969,11 @@ ORDER BY "source"."str0" ASC
                     json!({
                         "cubeName": "KibanaSampleDataEcommerce",
                         "alias": "kibanasampledata",
-                        "cubeParams": ["KibanaSampleDataEcommerce"],
-                        "expr": format!("(((${{KibanaSampleDataEcommerce.order_date}} >= DATE('{start_date}')) AND (${{KibanaSampleDataEcommerce.order_date}} < DATE('{end_date}'))) AND (((${{KibanaSampleDataEcommerce.notes}} = $0$) OR (${{KibanaSampleDataEcommerce.notes}} = $1$)) OR (${{KibanaSampleDataEcommerce.notes}} = $2$)))"),
+                        "expr": {
+                            "type": "SqlFunction",
+                            "cubeParams": ["KibanaSampleDataEcommerce"],
+                            "sql": format!("(((${{KibanaSampleDataEcommerce.order_date}} >= DATE('{start_date}')) AND (${{KibanaSampleDataEcommerce.order_date}} < DATE('{end_date}'))) AND (((${{KibanaSampleDataEcommerce.notes}} = $0$) OR (${{KibanaSampleDataEcommerce.notes}} = $1$)) OR (${{KibanaSampleDataEcommerce.notes}} = $2$)))"),
+                        },
                         "groupingSet": null,
                     }).to_string(),
                 ]),

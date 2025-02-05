@@ -66,13 +66,24 @@ pub struct SqlQuery {
 }
 
 #[derive(Debug, Clone, Serialize)]
-struct UngrouppedMemberDef {
+struct SqlFunctionExpr {
+    #[serde(rename = "cubeParams")]
+    cube_params: Vec<String>,
+    sql: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "type")]
+enum UngroupedMemberExpr {
+    SqlFunction(SqlFunctionExpr),
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct UngroupedMemberDef {
     #[serde(rename = "cubeName")]
     cube_name: String,
     alias: String,
-    #[serde(rename = "cubeParams")]
-    cube_params: Vec<String>,
-    expr: String,
+    expr: UngroupedMemberExpr,
     #[serde(rename = "groupingSet")]
     grouping_set: Option<GroupingSetDesc>,
 }
@@ -1548,8 +1559,8 @@ impl CubeScanWrapperNode {
     fn make_member_def(
         column: &AliasedColumn,
         used_cubes: &Vec<String>,
-    ) -> Result<UngrouppedMemberDef> {
-        let res = UngrouppedMemberDef {
+    ) -> Result<UngroupedMemberDef> {
+        let res = UngroupedMemberDef {
             cube_name: used_cubes
                 .iter()
                 .next()
@@ -1561,8 +1572,10 @@ impl CubeScanWrapperNode {
                 })?
                 .to_string(),
             alias: column.alias.clone(),
-            cube_params: used_cubes.clone(),
-            expr: column.expr.clone(),
+            expr: UngroupedMemberExpr::SqlFunction(SqlFunctionExpr {
+                cube_params: used_cubes.clone(),
+                sql: column.expr.clone(),
+            }),
             grouping_set: None,
         };
         Ok(res)
