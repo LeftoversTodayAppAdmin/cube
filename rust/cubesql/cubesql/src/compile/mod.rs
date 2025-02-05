@@ -7226,11 +7226,11 @@ ORDER BY
 
         fn trivial_member_expr(cube: &str, member: &str, alias: &str) -> String {
             json!({
-                "cube_name": cube,
+                "cubeName": cube,
                 "alias": alias,
-                "cube_params": [cube],
+                "cubeParams": [cube],
                 "expr": format!("${{{cube}.{member}}}"),
-                "grouping_set": null,
+                "groupingSet": null,
             })
             .to_string()
         }
@@ -7243,35 +7243,35 @@ ORDER BY
             V1LoadRequestQuery {
                 measures: Some(vec![
                     json!({
-                        "cube_name": "WideCube",
+                        "cubeName": "WideCube",
                         "alias": "max_source_measu",
-                        "cube_params": ["WideCube"],
+                        "cubeParams": ["WideCube"],
                         "expr": "${WideCube.measure1}",
-                        "grouping_set": null,
+                        "groupingSet": null,
                     })
                     .to_string(),
                     json!({
-                        "cube_name": "WideCube",
+                        "cubeName": "WideCube",
                         "alias": "max_source_measu_1",
-                        "cube_params": ["WideCube"],
+                        "cubeParams": ["WideCube"],
                         "expr": "${WideCube.measure2}",
-                        "grouping_set": null,
+                        "groupingSet": null,
                     })
                     .to_string(),
                     json!({
-                        "cube_name": "WideCube",
+                        "cubeName": "WideCube",
                         "alias": "sum_source_measu",
-                        "cube_params": ["WideCube"],
+                        "cubeParams": ["WideCube"],
                         "expr": "${WideCube.measure3}",
-                        "grouping_set": null,
+                        "groupingSet": null,
                     })
                     .to_string(),
                     json!({
-                        "cube_name": "WideCube",
+                        "cubeName": "WideCube",
                         "alias": "max_source_measu_2",
-                        "cube_params": ["WideCube"],
+                        "cubeParams": ["WideCube"],
                         "expr": "${WideCube.measure4}",
-                        "grouping_set": null,
+                        "groupingSet": null,
                     })
                     .to_string(),
                 ]),
@@ -7280,11 +7280,11 @@ ORDER BY
                     trivial_member_expr("WideCube", "dim3", "dim3"),
                     trivial_member_expr("WideCube", "dim4", "dim4"),
                     json!({
-                        "cube_name": "WideCube",
+                        "cubeName": "WideCube",
                         "alias": "pivot_grouping",
-                        "cube_params": ["WideCube"],
+                        "cubeParams": ["WideCube"],
                         "expr": "0",
-                        "grouping_set": null,
+                        "groupingSet": null,
                     })
                     .to_string()
                 ]),
@@ -11805,20 +11805,20 @@ ORDER BY "source"."str0" ASC
                 measures: Some(vec![]),
                 dimensions: Some(vec![
                     json!({
-                        "cube_name": "KibanaSampleDataEcommerce",
+                        "cubeName": "KibanaSampleDataEcommerce",
                         "alias": "ta_1_order_date_",
-                        "cube_params": ["KibanaSampleDataEcommerce", "Logs"],
+                        "cubeParams": ["KibanaSampleDataEcommerce", "Logs"],
                         "expr": "((${KibanaSampleDataEcommerce.order_date} = DATE('1994-05-01')) OR (${KibanaSampleDataEcommerce.order_date} = DATE('1996-05-03')))",
-                        "grouping_set": null,
+                        "groupingSet": null,
                     }).to_string(),
                 ]),
                 segments: Some(vec![
                     json!({
-                        "cube_name": "KibanaSampleDataEcommerce",
+                        "cubeName": "KibanaSampleDataEcommerce",
                         "alias": "lower_ta_2_conte",
-                        "cube_params": ["KibanaSampleDataEcommerce", "Logs"],
+                        "cubeParams": ["KibanaSampleDataEcommerce", "Logs"],
                         "expr": "(LOWER(${Logs.content}) = $0$)",
-                        "grouping_set": null,
+                        "groupingSet": null,
                     }).to_string(),
                 ]),
                 order: Some(vec![]),
@@ -12086,34 +12086,34 @@ ORDER BY "source"."str0" ASC
                 measures: Some(vec![]),
                 dimensions: Some(vec![
                     json!({
-                        "cube_name": "KibanaSampleDataEcommerce",
+                        "cubeName": "KibanaSampleDataEcommerce",
                         "alias": "customer_gender",
-                        "cube_params": ["KibanaSampleDataEcommerce"],
+                        "cubeParams": ["KibanaSampleDataEcommerce"],
                         "expr": "${KibanaSampleDataEcommerce.customer_gender}",
-                        "grouping_set": null,
+                        "groupingSet": null,
                     }).to_string(),
                     json!({
-                        "cube_name": "KibanaSampleDataEcommerce",
+                        "cubeName": "KibanaSampleDataEcommerce",
                         "alias": "cast_dateadd_utf",
-                        "cube_params": ["KibanaSampleDataEcommerce"],
+                        "cubeParams": ["KibanaSampleDataEcommerce"],
                         "expr": "CAST(DATE_ADD(${KibanaSampleDataEcommerce.order_date}, INTERVAL '2 DAY') AS DATE)",
-                        "grouping_set": null,
+                        "groupingSet": null,
                     }).to_string(),
                     json!({
-                        "cube_name": "KibanaSampleDataEcommerce",
+                        "cubeName": "KibanaSampleDataEcommerce",
                         "alias": "dateadd_utf8__se",
-                        "cube_params": ["KibanaSampleDataEcommerce"],
+                        "cubeParams": ["KibanaSampleDataEcommerce"],
                         "expr": "DATE_ADD(${KibanaSampleDataEcommerce.order_date}, INTERVAL '2000000 MILLISECOND')",
-                        "grouping_set": null,
+                        "groupingSet": null,
                     }).to_string(),
                 ]),
                 segments: Some(vec![
                     json!({
-                        "cube_name": "KibanaSampleDataEcommerce",
+                        "cubeName": "KibanaSampleDataEcommerce",
                         "alias": "dateadd_utf8__da",
-                        "cube_params": ["KibanaSampleDataEcommerce"],
+                        "cubeParams": ["KibanaSampleDataEcommerce"],
                         "expr": "(DATE_ADD(${KibanaSampleDataEcommerce.order_date}, INTERVAL '2 DAY') < DATE('2014-06-02'))",
-                        "grouping_set": null,
+                        "groupingSet": null,
                     }).to_string(),
                 ]),
                 order: Some(vec![]),
@@ -12907,29 +12907,29 @@ ORDER BY "source"."str0" ASC
             V1LoadRequestQuery {
                 measures: Some(vec![
                     json!({
-                        "cube_name": "KibanaSampleDataEcommerce",
+                        "cubeName": "KibanaSampleDataEcommerce",
                         "alias": "avg_kibanasample",
-                        "cube_params": ["KibanaSampleDataEcommerce"],
+                        "cubeParams": ["KibanaSampleDataEcommerce"],
                         "expr": "${KibanaSampleDataEcommerce.avgPrice}",
-                        "grouping_set": null,
+                        "groupingSet": null,
                     }).to_string(),
                 ]),
                 dimensions: Some(vec![
                     json!({
-                        "cube_name": "KibanaSampleDataEcommerce",
+                        "cubeName": "KibanaSampleDataEcommerce",
                         "alias": "cast_kibanasampl",
-                        "cube_params": ["KibanaSampleDataEcommerce"],
+                        "cubeParams": ["KibanaSampleDataEcommerce"],
                         "expr": "CAST(${KibanaSampleDataEcommerce.order_date} AS DATE)",
-                        "grouping_set": null,
+                        "groupingSet": null,
                     }).to_string(),
                 ]),
                 segments: Some(vec![
                     json!({
-                        "cube_name": "KibanaSampleDataEcommerce",
+                        "cubeName": "KibanaSampleDataEcommerce",
                         "alias": "kibanasampledata",
-                        "cube_params": ["KibanaSampleDataEcommerce"],
+                        "cubeParams": ["KibanaSampleDataEcommerce"],
                         "expr": format!("(((${{KibanaSampleDataEcommerce.order_date}} >= DATE('{start_date}')) AND (${{KibanaSampleDataEcommerce.order_date}} < DATE('{end_date}'))) AND (((${{KibanaSampleDataEcommerce.notes}} = $0$) OR (${{KibanaSampleDataEcommerce.notes}} = $1$)) OR (${{KibanaSampleDataEcommerce.notes}} = $2$)))"),
-                        "grouping_set": null,
+                        "groupingSet": null,
                     }).to_string(),
                 ]),
                 order: Some(vec![]),
