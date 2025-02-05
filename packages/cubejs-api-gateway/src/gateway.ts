@@ -80,7 +80,9 @@ import {
   normalizeQuery,
   normalizeQueryCancelPreAggregations,
   normalizeQueryPreAggregationPreview,
-  normalizeQueryPreAggregations, remapToQueryAdapterFormat,
+  normalizeQueryPreAggregations,
+  parseInputMemberExpression,
+  remapToQueryAdapterFormat,
 } from './query';
 import { cachedHandler } from './cached-handler';
 import { createJWKsFetcher } from './jwk';
@@ -1340,30 +1342,26 @@ class ApiGateway {
   }
 
   private parseMemberExpression(memberExpression: string): string | ParsedMemberExpression {
-    try {
-      if (memberExpression.startsWith('{')) {
-        const obj = JSON.parse(memberExpression);
-        const args = obj.cube_params;
-        args.push(`return \`${obj.expr}\``);
+    if (memberExpression.startsWith('{')) {
+      const obj = parseInputMemberExpression(JSON.parse(memberExpression));
+      const args = obj.cube_params;
+      args.push(`return \`${obj.expr}\``);
 
-        const groupingSet = obj.grouping_set ? {
-          groupType: obj.grouping_set.group_type,
-          id: obj.grouping_set.id,
-          subId: obj.grouping_set.sub_id ? obj.grouping_set.sub_id : undefined
-        } : undefined;
+      const groupingSet = obj.grouping_set ? {
+        groupType: obj.grouping_set.group_type,
+        id: obj.grouping_set.id,
+        subId: obj.grouping_set.sub_id ? obj.grouping_set.sub_id : undefined
+      } : undefined;
 
-        return {
-          cubeName: obj.cube_name,
-          name: obj.alias,
-          expressionName: obj.alias,
-          expression: args,
-          definition: memberExpression,
-          groupingSet,
-        };
-      } else {
-        return memberExpression;
-      }
-    } catch {
+      return {
+        cubeName: obj.cube_name,
+        name: obj.alias,
+        expressionName: obj.alias,
+        expression: args,
+        definition: memberExpression,
+        groupingSet,
+      };
+    } else {
       return memberExpression;
     }
   }
