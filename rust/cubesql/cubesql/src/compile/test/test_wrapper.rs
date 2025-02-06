@@ -1465,3 +1465,56 @@ WHERE
     assert_eq!(request.measures.unwrap().len(), 1);
     assert_eq!(request.dimensions.unwrap().len(), 0);
 }
+
+/// MIN(avg_measure) should get pushed to Cube with replaced measure
+#[tokio::test]
+async fn wrapper_min_from_avg_measure() {
+    if !Rewriter::sql_push_down_enabled() {
+        return;
+    }
+    init_testing_logger();
+
+    let query_plan = convert_select_to_query_plan(
+        // language=PostgreSQL
+        r#"
+        SELECT
+            MIN(avgPrice)
+        FROM
+            MultiTypeCube
+        "#
+        .to_string(),
+        DatabaseProtocol::PostgreSQL,
+    )
+    .await;
+
+    let physical_plan = query_plan.as_physical_plan().await.unwrap();
+    println!(
+        "Physical plan: {}",
+        displayable(physical_plan.as_ref()).indent()
+    );
+
+    assert_eq!(
+        query_plan
+            .as_logical_plan()
+            .find_cube_scan_wrapped_sql()
+            .request,
+        TransportLoadRequestQuery {
+            measures: Some(vec![json!({
+                "cubeName": "MultiTypeCube",
+                "alias": "min_multitypecub",
+                "expr": {
+                    "type": "PatchMeasure",
+                    "sourceMeasure": "MultiTypeCube.avgPrice",
+                    "replaceAggregationType": "min",
+                    "addFilters": [],
+                },
+                "groupingSet": null,
+            })
+            .to_string(),]),
+            dimensions: Some(vec![]),
+            segments: Some(vec![]),
+            order: Some(vec![]),
+            ..Default::default()
+        }
+    );
+}
