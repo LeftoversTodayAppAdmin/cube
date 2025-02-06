@@ -1778,7 +1778,6 @@ fn literal_bool(literal_bool: bool) -> String {
     format!("(LiteralExpr LiteralExprValue:b:{})", literal_bool)
 }
 
-#[allow(dead_code)]
 fn literal_null() -> String {
     format!("(LiteralExpr LiteralExprValue:null)")
 }
