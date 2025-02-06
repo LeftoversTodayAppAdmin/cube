@@ -2258,6 +2258,8 @@ pub fn create_pg_get_constraintdef_udf() -> ScalarUDF {
     )
 }
 
+pub const MEASURE_UDAF_NAME: &str = "measure";
+
 pub fn create_measure_udaf() -> AggregateUDF {
     let signature = Signature::any(1, Volatility::Immutable);
 
@@ -2278,7 +2280,7 @@ pub fn create_measure_udaf() -> AggregateUDF {
     let state_type: StateTypeFunction = Arc::new(move |_| Ok(state_type.clone()));
 
     AggregateUDF::new(
-        "measure",
+        MEASURE_UDAF_NAME,
         &signature,
         &return_type,
         &accumulator,
