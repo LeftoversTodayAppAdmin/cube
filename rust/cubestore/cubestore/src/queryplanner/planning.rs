@@ -33,6 +33,7 @@ use flatbuffers::bitflags::_core::fmt::Formatter;
 use itertools::{EitherOrBoth, Itertools};
 
 use super::serialized_plan::PreSerializedPlan;
+use super::topk::{materialize_topk, ClusterAggregateTopKSerialized};
 use crate::cluster::Cluster;
 use crate::metastore::multi_index::MultiPartition;
 use crate::metastore::table::{Table, TablePath};
@@ -54,6 +55,7 @@ use crate::queryplanner::topk::ClusterAggregateTopK;
 use crate::queryplanner::{CubeTableLogical, InfoSchemaTableProvider};
 use crate::table::{cmp_same_types, Row};
 use crate::CubeError;
+use crate::queryplanner::topk::plan_topk;
 use datafusion::common;
 use datafusion::common::tree_node::{TreeNode, TreeNodeRecursion, TreeNodeVisitor};
 use datafusion::common::DFSchemaRef;
@@ -841,10 +843,9 @@ impl PlanRewriter for ChooseIndex<'_> {
     ) -> Result<LogicalPlan, DataFusionError> {
         let p = self.choose_table_index(n, ctx)?;
         let mut p = pull_up_cluster_send(p)?;
-        // TODO upgrade DF
-        // if self.enable_topk {
-        //     p = materialize_topk(p)?;
-        // }
+        if self.enable_topk {
+            p = materialize_topk(p)?;
+        }
         Ok(p)
     }
 }
@@ -1369,7 +1370,7 @@ fn partition_filter_schema(index: &IdRow<Index>) -> datafusion::arrow::datatypes
     datafusion::arrow::datatypes::Schema::new(schema_fields)
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, Hash, PartialEq, Eq)]
 pub enum Snapshot {
     Index(IndexSnapshot),
     Inline(InlineSnapshot),
@@ -1382,6 +1383,7 @@ pub enum ExtensionNodeSerialized {
     ClusterSend(ClusterSendSerialized),
     PanicWorker(PanicWorkerSerialized),
     RollingWindowAggregate(RollingWindowAggregateSerialized),
+    ClusterAggregateTopK(ClusterAggregateTopKSerialized),
 }
 
 #[derive(Debug, Clone)]
@@ -1675,11 +1677,10 @@ impl ExtensionPlanner for CubeExtensionPlanner {
                     CubeError::internal("ClusterSend cut point not found".to_string())
                 })?,
             )?))
-            // TODO upgrade DF
-            // } else if let Some(topk) = node.as_any().downcast_ref::<ClusterAggregateTopK>() {
-            //     assert_eq!(inputs.len(), 1);
-            //     let input = inputs.into_iter().next().unwrap();
-            //     Ok(Some(plan_topk(planner, self, topk, input.clone(), state)?))
+        } else if let Some(topk) = node.as_any().downcast_ref::<ClusterAggregateTopK>() {
+            assert_eq!(inputs.len(), 1);
+            let input = inputs.iter().next().unwrap();
+            Ok(Some(plan_topk(planner, self, topk, input.clone(), state)?))
         } else if let Some(_) = node.as_any().downcast_ref::<PanicWorkerNode>() {
             assert_eq!(inputs.len(), 0);
             Ok(Some(plan_panic_worker()?))
@@ -1828,15 +1829,15 @@ pub mod tests {
     use crate::queryplanner::pretty_printers::PPOptions;
     use crate::queryplanner::query_executor::ClusterSendExec;
     use crate::queryplanner::serialized_plan::RowRange;
-    use crate::queryplanner::{pretty_printers, CubeTableLogical};
+    use crate::queryplanner::{pretty_printers, CubeTableLogical, QueryPlannerImpl};
     use crate::sql::parser::{CubeStoreParser, Statement};
     use crate::table::{Row, TableValue};
     use crate::CubeError;
     use datafusion::config::ConfigOptions;
     use datafusion::error::DataFusionError;
-    use datafusion::execution::SessionState;
+    use datafusion::execution::{SessionState, SessionStateBuilder};
     use datafusion::logical_expr::{AggregateUDF, LogicalPlan, ScalarUDF, TableSource, WindowUDF};
-    use datafusion::prelude::SessionContext;
+    use datafusion::prelude::{SessionConfig, SessionContext};
     use datafusion::sql::TableReference;
     use std::collections::HashMap;
     use std::iter::FromIterator;
@@ -2311,7 +2312,7 @@ pub mod tests {
     fn make_test_indices(add_multi_indices: bool) -> TestIndices {
         const SCHEMA: u64 = 0;
         const PARTITIONED_INDEX: u64 = 0; // Only 1 partitioned index for now.
-        let mut i = TestIndices::default();
+        let mut i = TestIndices::new();
 
         let customers_cols = int_columns(&[
             "customer_id",
@@ -2475,11 +2476,12 @@ pub mod tests {
         let plan = SqlToRel::new(i)
             .statement_to_plan(DFStatement::Statement(Box::new(statement)))
             .unwrap();
-        SessionContext::new().state().optimize(&plan).unwrap()
+        QueryPlannerImpl::execution_context_helper(SessionConfig::new()).state().optimize(&plan).unwrap()
     }
 
-    #[derive(Debug, Default)]
+    #[derive(Debug)]
     pub struct TestIndices {
+        session_state: Arc<SessionState>,
         tables: Vec<Table>,
         indices: Vec<Index>,
         partitions: Vec<Partition>,
@@ -2489,6 +2491,17 @@ pub mod tests {
     }
 
     impl TestIndices {
+        pub fn new() -> TestIndices {
+            TestIndices {
+                session_state: Arc::new(SessionStateBuilder::new().with_default_features().build()),
+                tables: Vec::new(),
+                indices: Vec::new(),
+                partitions: Vec::new(),
+                chunks: Vec::new(),
+                multi_partitions: Vec::new(),
+                config_options: ConfigOptions::default(),
+            }
+        }
         pub fn add_table(&mut self, t: Table) -> u64 {
             assert_eq!(t.get_schema_id(), 0);
             let table_id = self.tables.len() as u64;
@@ -2568,21 +2581,24 @@ pub mod tests {
                 .ok_or(DataFusionError::Plan(format!("Table not found {}", name)))
         }
 
-        fn get_function_meta(&self, _name: &str) -> Option<Arc<ScalarUDF>> {
+        fn get_function_meta(&self, name: &str) -> Option<Arc<ScalarUDF>> {
             // Note that this is missing HLL functions.
-            None
+            let name = name.to_ascii_lowercase();
+            self.session_state.scalar_functions().get(&name).cloned()
         }
 
-        fn get_aggregate_meta(&self, _name: &str) -> Option<Arc<AggregateUDF>> {
+        fn get_aggregate_meta(&self, name_param: &str) -> Option<Arc<AggregateUDF>> {
             // Note that this is missing HLL functions.
-            None
+            let name = name_param.to_ascii_lowercase();
+            self.session_state.aggregate_functions().get(&name).cloned()
         }
 
         fn get_window_meta(&self, name: &str) -> Option<Arc<WindowUDF>> {
-            None
+            // TODO upgrade DF: Should this also use .to_ascii_lowercase?
+            self.session_state.window_functions().get(name).cloned()
         }
 
-        fn get_variable_type(&self, variable_names: &[String]) -> Option<DataType> {
+        fn get_variable_type(&self, _variable_names: &[String]) -> Option<DataType> {
             None
         }
 
@@ -2591,15 +2607,19 @@ pub mod tests {
         }
 
         fn udf_names(&self) -> Vec<String> {
-            Vec::new()
+            self.session_state.scalar_functions().keys().cloned().collect()
         }
 
         fn udaf_names(&self) -> Vec<String> {
-            Vec::new()
+            self.session_state.aggregate_functions().keys().cloned().collect()
         }
 
         fn udwf_names(&self) -> Vec<String> {
-            Vec::new()
+            self.session_state
+            .window_functions()
+            .keys()
+            .cloned()
+            .collect()
         }
     }
 

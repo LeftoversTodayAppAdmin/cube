@@ -1,20 +1,23 @@
 mod execute;
 mod plan;
 
+use datafusion::execution::FunctionRegistry;
+use datafusion_proto::bytes::Serializeable;
 // pub use execute::AggregateTopKExec;
-// pub use plan::materialize_topk;
-// pub use plan::plan_topk;
+pub use plan::materialize_topk;
+pub use plan::plan_topk;
 
 use crate::queryplanner::planning::Snapshots;
+use crate::CubeError;
 use datafusion::arrow::compute::SortOptions;
 use datafusion::common::DFSchemaRef;
 use datafusion::logical_expr::{Expr, Extension, LogicalPlan, UserDefinedLogicalNode};
 use itertools::Itertools;
-use serde::Deserialize;
-use serde::Serialize;
+use serde_derive::{Deserialize, Serialize};
 use std::any::Any;
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
+use std::hash::Hash;
 use std::hash::Hasher;
 use std::sync::Arc;
 
@@ -24,7 +27,7 @@ pub const MIN_TOPK_STREAM_ROWS: usize = 1024;
 /// Aggregates input by [group_expr], sorts with [order_by] and returns [limit] first elements.
 /// The output schema must have exactly columns for results of [group_expr] followed by results
 /// of [aggregate_expr].
-#[derive(Debug)]
+#[derive(Debug, Hash, Eq, PartialEq)]
 pub struct ClusterAggregateTopK {
     pub limit: usize,
     pub input: Arc<LogicalPlan>,
@@ -34,6 +37,70 @@ pub struct ClusterAggregateTopK {
     pub having_expr: Option<Expr>,
     pub schema: DFSchemaRef,
     pub snapshots: Vec<Snapshots>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ClusterAggregateTopKSerialized {
+    limit: usize,
+    // Vec<Expr>
+    group_expr: Vec<Vec<u8>>,
+    // Vec<Expr>
+    aggregate_expr: Vec<Vec<u8>>,
+    order_by: Vec<SortColumn>,
+    // Option<Expr>
+    having_expr: Option<Vec<u8>>,
+    snapshots: Vec<Snapshots>,
+}
+
+impl ClusterAggregateTopK {
+    pub fn from_serialized(
+        serialized: ClusterAggregateTopKSerialized,
+        inputs: &[LogicalPlan],
+        registry: &dyn FunctionRegistry,
+    ) -> Result<ClusterAggregateTopK, CubeError> {
+        assert_eq!(inputs.len(), 1);
+        let input = Arc::new(inputs[0].clone());
+        let group_expr = serialized
+            .group_expr
+            .into_iter()
+            .map(|e| Expr::from_bytes_with_registry(e.as_slice(), registry))
+            .collect::<Result<Vec<_>, _>>()?;
+        let aggregate_expr = serialized
+            .aggregate_expr
+            .into_iter()
+            .map(|e| Expr::from_bytes_with_registry(e.as_slice(), registry))
+            .collect::<Result<Vec<_>, _>>()?;
+        let having_expr: Option<Expr> = serialized
+            .having_expr
+            .map(|e| Expr::from_bytes_with_registry(e.as_slice(), registry))
+            .transpose()?;
+        let schema = datafusion::logical_expr::Aggregate::try_new(
+            input.clone(),
+            group_expr.clone(),
+            aggregate_expr.clone()
+        )?.schema;
+        Ok(ClusterAggregateTopK {
+            input,
+            limit: serialized.limit,
+            group_expr,
+            aggregate_expr,
+            order_by: serialized.order_by,
+            having_expr,
+            schema,
+            snapshots: serialized.snapshots,
+        })
+    }
+
+    pub fn to_serialized(&self) -> Result<ClusterAggregateTopKSerialized, CubeError> {
+        Ok(ClusterAggregateTopKSerialized {
+            limit: self.limit,
+            group_expr: self.group_expr.iter().map(|e| e.to_bytes().map(|b| b.to_vec())).collect::<Result<Vec<_>, _>>()?,
+            aggregate_expr: self.aggregate_expr.iter().map(|e| e.to_bytes().map(|b| b.to_vec())).collect::<Result<Vec<_>, _>>()?,
+            order_by: self.order_by.clone(),
+            having_expr: self.having_expr.as_ref().map(|e| e.to_bytes().map(|b| b.to_vec())).transpose()?,
+            snapshots: self.snapshots.clone(),
+        })
+    }
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Hash)]
@@ -140,12 +207,15 @@ impl UserDefinedLogicalNode for ClusterAggregateTopK {
     }
 
     fn dyn_hash(&self, state: &mut dyn Hasher) {
-        // TODO upgrade DF
-        todo!()
+        let mut state = state;
+        self.hash(&mut state);
     }
 
     fn dyn_eq(&self, other: &dyn UserDefinedLogicalNode) -> bool {
-        // TODO upgrade DF
-        todo!()
+        other
+            .as_any()
+            .downcast_ref()
+            .map(|s| self.eq(s))
+            .unwrap_or(false)
     }
 }

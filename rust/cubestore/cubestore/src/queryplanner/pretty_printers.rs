@@ -375,7 +375,8 @@ fn pp_source(t: Arc<dyn TableProvider>) -> String {
     }
 }
 
-fn pp_sort_columns(first_agg: usize, cs: &[SortColumn]) -> String {
+// TODO upgrade DF: No pub
+pub fn pp_sort_columns(first_agg: usize, cs: &[SortColumn]) -> String {
     format!(
         "[{}]",
         cs.iter()
