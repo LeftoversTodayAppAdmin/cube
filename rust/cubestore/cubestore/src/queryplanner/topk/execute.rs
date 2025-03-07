@@ -13,6 +13,7 @@ use datafusion::physical_plan::common::collect;
 use datafusion::physical_plan::filter::FilterExec;
 use datafusion::physical_plan::limit::GlobalLimitExec;
 use datafusion::physical_plan::memory::MemoryExec;
+use datafusion::physical_plan::udaf::AggregateFunctionExpr;
 use datafusion::physical_plan::{
     ExecutionPlan, Partitioning, PhysicalExpr, SendableRecordBatchStream,
 };
@@ -28,76 +29,79 @@ use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
-// TODO upgrade DF
-// #[derive(Debug, Clone, PartialEq, Eq)]
-// pub enum TopKAggregateFunction {
-//     Sum,
-//     Min,
-//     Max,
-//     Merge,
-// }
-//
-// #[derive(Debug)]
-// pub struct AggregateTopKExec {
-//     pub limit: usize,
-//     pub key_len: usize,
-//     pub agg_expr: Vec<Arc<dyn AggregateExpr>>,
-//     pub agg_descr: Vec<AggDescr>,
-//     pub order_by: Vec<SortColumn>,
-//     pub having: Option<Arc<dyn PhysicalExpr>>,
-//     /// Always an instance of ClusterSendExec or WorkerExec.
-//     pub cluster: Arc<dyn ExecutionPlan>,
-//     pub schema: SchemaRef,
-// }
-//
-// /// Third item is the neutral value for the corresponding aggregate function.
-// type AggDescr = (TopKAggregateFunction, SortOptions, ScalarValue);
-//
-// impl AggregateTopKExec {
-//     pub fn new(
-//         limit: usize,
-//         key_len: usize,
-//         agg_expr: Vec<Arc<dyn AggregateExpr>>,
-//         agg_fun: &[TopKAggregateFunction],
-//         order_by: Vec<SortColumn>,
-//         having: Option<Arc<dyn PhysicalExpr>>,
-//         cluster: Arc<dyn ExecutionPlan>,
-//         schema: SchemaRef,
-//     ) -> AggregateTopKExec {
-//         assert_eq!(schema.fields().len(), agg_expr.len() + key_len);
-//         assert_eq!(agg_fun.len(), agg_expr.len());
-//         let agg_descr = Self::compute_descr(&agg_expr, agg_fun, &order_by);
-//
-//         AggregateTopKExec {
-//             limit,
-//             key_len,
-//             agg_expr,
-//             agg_descr,
-//             order_by,
-//             having,
-//             cluster,
-//             schema,
-//         }
-//     }
-//
-//     fn compute_descr(
-//         agg_expr: &[Arc<dyn AggregateExpr>],
-//         agg_fun: &[TopKAggregateFunction],
-//         order_by: &[SortColumn],
-//     ) -> Vec<AggDescr> {
-//         let mut agg_descr = Vec::with_capacity(agg_expr.len());
-//         for i in 0..agg_expr.len() {
-//             agg_descr.push((
-//                 agg_fun[i].clone(),
-//                 SortOptions::default(),
-//                 ScalarValue::Int64(None),
-//             ));
-//         }
-//         for o in order_by {
-//             agg_descr[o.agg_index].1 = o.sort_options();
-//         }
-//         agg_descr
-//     }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TopKAggregateFunction {
+    Sum,
+    Min,
+    Max,
+    Merge,
+}
+
+#[derive(Debug)]
+pub struct AggregateTopKExec {
+    pub limit: usize,
+    pub key_len: usize,
+    pub agg_expr: Vec<AggregateFunctionExpr>,
+    pub agg_descr: Vec<AggDescr>,
+    pub order_by: Vec<SortColumn>,
+    pub having: Option<Arc<dyn PhysicalExpr>>,
+    /// Always an instance of ClusterSendExec or WorkerExec.
+    pub cluster: Arc<dyn ExecutionPlan>,
+    pub schema: SchemaRef,
+}
+
+/// Third item is the neutral value for the corresponding aggregate function.
+type AggDescr = (TopKAggregateFunction, SortOptions, ScalarValue);
+
+impl AggregateTopKExec {
+    pub fn new(
+        limit: usize,
+        key_len: usize,
+        agg_expr: Vec<AggregateFunctionExpr>,
+        agg_fun: &[TopKAggregateFunction],
+        order_by: Vec<SortColumn>,
+        having: Option<Arc<dyn PhysicalExpr>>,
+        cluster: Arc<dyn ExecutionPlan>,
+        schema: SchemaRef,
+    ) -> AggregateTopKExec {
+        assert_eq!(schema.fields().len(), agg_expr.len() + key_len);
+        assert_eq!(agg_fun.len(), agg_expr.len());
+        let agg_descr = Self::compute_descr(&agg_expr, agg_fun, &order_by);
+
+        AggregateTopKExec {
+            limit,
+            key_len,
+            agg_expr,
+            agg_descr,
+            order_by,
+            having,
+            cluster,
+            schema,
+        }
+    }
+
+    fn compute_descr(
+        agg_expr: &[AggregateFunctionExpr],
+        agg_fun: &[TopKAggregateFunction],
+        order_by: &[SortColumn],
+    ) -> Vec<AggDescr> {
+        let mut agg_descr = Vec::with_capacity(agg_expr.len());
+        for i in 0..agg_expr.len() {
+            agg_descr.push((
+                agg_fun[i].clone(),
+                SortOptions::default(),
+                ScalarValue::Int64(None),
+            ));
+        }
+        for o in order_by {
+            agg_descr[o.agg_index].1 = o.sort_options();
+        }
+        agg_descr
+    }
+}
+
+// TODO upgrade DF: We need the implementation.
+
 //
 //     #[cfg(test)]
 //     fn change_order(&mut self, order_by: Vec<SortColumn>) {
