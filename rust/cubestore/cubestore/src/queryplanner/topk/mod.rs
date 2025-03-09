@@ -1,9 +1,10 @@
 mod execute;
 mod plan;
+mod util;
 
 use datafusion::execution::FunctionRegistry;
 use datafusion_proto::bytes::Serializeable;
-// pub use execute::AggregateTopKExec;
+pub use execute::AggregateTopKExec;
 pub use plan::materialize_topk;
 pub use plan::plan_topk;
 
