@@ -91,13 +91,18 @@ pub(crate) fn append_value(b: &mut dyn ArrayBuilder, v: &ScalarValue) -> Result<
                 .downcast_mut::<ListBuilder<$builder>>()
                 .expect("invalid list builder");
             let vs = $list;
+            // `vs` (a GenericListArray in ScalarValue::List) is supposed to have length 1.  That
+            // is, its zero'th element and only element is either null or a list `value_to_append`
+            // below, with some arbitrary length.
             if vs.len() == vs.null_count() {
-                // ^^ TODO: ScalarValue::is_null() code duplication.  We'd rather call is_null() on the original ScalarValue.
+                // ^^ ScalarValue::is_null() code duplication.  is_null() claims some code paths
+                // might put a list in `ScalarValue::List` that does not have length 1.
                 return Ok(b.append(false));
             }
             let values_builder = b.values();
-            for v in vs {
-                append_value(values_builder, v)?;
+            let value_to_append: ArrayRef = vs.value(0);
+            for i in 0..value_to_append.len() {
+                append_value(values_builder, &ScalarValue::try_from_array(&value_to_append, i)?)?;
             }
             Ok(b.append(true))
         }};

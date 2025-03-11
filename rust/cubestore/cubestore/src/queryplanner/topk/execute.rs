@@ -1002,10 +1002,13 @@ mod tests {
     use datafusion::arrow::datatypes::{DataType, Field, Schema, SchemaRef};
     use datafusion::arrow::error::ArrowError;
     use datafusion::arrow::record_batch::RecordBatch;
-    use datafusion::common::DFSchema;
+    use datafusion::common::{Column, DFSchema};
     // TODO upgrade DF
     // use datafusion::catalog::catalog::MemoryCatalogList;
     use datafusion::error::DataFusionError;
+    use datafusion::execution::{SessionState, SessionStateBuilder};
+    use datafusion::logical_expr::expr::AggregateFunction;
+    use datafusion::logical_expr::AggregateUDF;
     // TODO upgrade DF
     // use datafusion::execution::context::{ExecutionConfig, ExecutionContextState, ExecutionProps};
     // use datafusion::logical_plan::{Column, DFField, DFSchema, Expr};
@@ -1015,14 +1018,20 @@ mod tests {
     // TODO upgrade DF
     // use datafusion::physical_plan::planner::DefaultPhysicalPlanner;
     use datafusion::physical_plan::ExecutionPlan;
+    use datafusion::physical_planner::{create_aggregate_expr_and_maybe_filter, DefaultPhysicalPlanner};
+    use datafusion::prelude::Expr;
     use futures::StreamExt;
     use itertools::Itertools;
 
+    use std::collections::HashMap;
     use std::iter::FromIterator;
     use std::sync::Arc;
 
     #[tokio::test]
     async fn topk_simple() {
+        let session_state = SessionStateBuilder::new().with_default_features().build();
+        let context: Arc<TaskContext> = session_state.task_ctx();
+
         // Test sum with descending sort order.
         let proto = mock_topk(
             2,
@@ -1043,6 +1052,7 @@ mod tests {
                 vec![make_batch(&bs, &[&[1, 100], &[0, 50], &[8, 11], &[6, 10]])],
                 vec![make_batch(&bs, &[&[6, 40], &[1, 20], &[0, 15], &[8, 9]])],
             ],
+            &context,
         )
         .await
         .unwrap();
@@ -1066,6 +1076,7 @@ mod tests {
                     make_batch(&bs, &[]),
                 ],
             ],
+            &context,
         )
         .await
         .unwrap();
@@ -1082,6 +1093,7 @@ mod tests {
                 ],
                 vec![make_batch(&bs, &[&[6, 40], &[1, 20], &[0, 15], &[8, 9]])],
             ],
+            &context,
         )
         .await
         .unwrap();
@@ -1097,6 +1109,7 @@ mod tests {
                 ],
                 vec![make_batch(&bs, &[&[6, 40], &[0, 15], &[8, 9]])],
             ],
+            &context,
         )
         .await
         .unwrap();
@@ -1118,6 +1131,7 @@ mod tests {
                     make_batch(&bs, &[&[1, 101]]),
                 ],
             ],
+            &context,
         )
         .await
         .unwrap();
@@ -1126,6 +1140,9 @@ mod tests {
 
     #[tokio::test]
     async fn topk_missing_elements() {
+        let session_state: SessionState = SessionStateBuilder::new().with_default_features().build();
+        let context: Arc<TaskContext> = session_state.task_ctx();
+
         // Start with sum, descending order.
         let mut proto = mock_topk(
             2,
@@ -1150,6 +1167,7 @@ mod tests {
                     &[&[3, 90], &[4, 80], &[5, -100], &[6, -500]],
                 )],
             ],
+            &context,
         )
         .await
         .unwrap();
@@ -1170,6 +1188,7 @@ mod tests {
                     &[&[3, -90], &[4, -80], &[5, 100], &[6, 500]],
                 )],
             ],
+            &context,
         )
         .await
         .unwrap();
@@ -1190,6 +1209,7 @@ mod tests {
                     &[&[Some(10), Some(1000)], &[Some(1), Some(900)]],
                 )],
             ],
+            &context,
         )
         .await
         .unwrap();
@@ -1198,6 +1218,9 @@ mod tests {
 
     #[tokio::test]
     async fn topk_sort_orders() {
+        let session_state: SessionState = SessionStateBuilder::new().with_default_features().build();
+        let context: Arc<TaskContext> = session_state.task_ctx();
+
         let mut proto = mock_topk(
             1,
             &[DataType::Int64],
@@ -1218,6 +1241,7 @@ mod tests {
                 vec![make_batch(&bs, &[&[1, 0], &[0, 100]])],
                 vec![make_batch(&bs, &[&[0, -100], &[1, -5]])],
             ],
+            &context,
         )
         .await
         .unwrap();
@@ -1235,6 +1259,7 @@ mod tests {
                 vec![make_batch(&bs, &[&[0, 100], &[1, 0]])],
                 vec![make_batch(&bs, &[&[1, -5], &[0, -100]])],
             ],
+            &context,
         )
         .await
         .unwrap();
@@ -1255,6 +1280,7 @@ mod tests {
                     &[&[Some(2), None], &[Some(3), Some(1)]],
                 )],
             ],
+            &context,
         )
         .await
         .unwrap();
@@ -1278,6 +1304,7 @@ mod tests {
                     &[&[Some(3), Some(1)], &[Some(2), None], &[Some(4), None]],
                 )],
             ],
+            &context,
         )
         .await
         .unwrap();
@@ -1286,6 +1313,9 @@ mod tests {
 
     #[tokio::test]
     async fn topk_multi_column_sort() {
+        let session_state: SessionState = SessionStateBuilder::new().with_default_features().build();
+        let context: Arc<TaskContext> = session_state.task_ctx();
+
         let proto = mock_topk(
             10,
             &[DataType::Int64],
@@ -1315,6 +1345,7 @@ mod tests {
                 )],
                 vec![make_batch(&bs, &[&[1, 0, 10], &[3, 50, 5], &[2, 50, 5]])],
             ],
+            &context,
         )
         .await
         .unwrap();
@@ -1351,13 +1382,14 @@ mod tests {
         RecordBatch::try_new(schema.clone(), columns).unwrap()
     }
 
-    fn topk_fun_to_fusion_type(topk_fun: &TopKAggregateFunction) -> Option<AggregateFunction> {
-        match topk_fun {
-            TopKAggregateFunction::Sum => Some(AggregateFunction::Sum),
-            TopKAggregateFunction::Max => Some(AggregateFunction::Max),
-            TopKAggregateFunction::Min => Some(AggregateFunction::Min),
-            _ => None,
-        }
+    fn topk_fun_to_fusion_type(ctx: &SessionState, topk_fun: &TopKAggregateFunction) -> Option<Arc<AggregateUDF>> {
+        let name = match topk_fun {
+            TopKAggregateFunction::Sum => "sum",
+            TopKAggregateFunction::Max => "max",
+            TopKAggregateFunction::Min => "min",
+            _ => return None,
+        };
+        ctx.aggregate_functions().get(name).cloned()
     }
     fn mock_topk(
         limit: usize,
@@ -1365,83 +1397,95 @@ mod tests {
         aggs: &[TopKAggregateFunction],
         order_by: Vec<SortColumn>,
     ) -> Result<AggregateTopKExec, DataFusionError> {
-        let key_fields = group_by
+        let key_fields: Vec<(Option<datafusion::sql::TableReference>, Arc<Field>)> = group_by
             .iter()
             .enumerate()
-            .map(|(i, t)| DFField::new(None, &format!("key{}", i + 1), t.clone(), false))
+            .map(|(i, t)| (None, Arc::new(Field::new(&format!("key{}", i + 1), t.clone(), false))))
             .collect_vec();
         let key_len = key_fields.len();
 
-        let input_agg_fields = (0..aggs.len())
-            .map(|i| DFField::new(None, &format!("agg{}", i + 1), DataType::Int64, true))
+        let input_agg_fields: Vec<(Option<datafusion::sql::TableReference>, Arc<Field>)> = (0..aggs.len())
+            .map(|i| (None, Arc::new(Field::new(&format!("agg{}", i + 1), DataType::Int64, true))))
             .collect_vec();
         let input_schema =
-            DFSchema::new(key_fields.iter().cloned().chain(input_agg_fields).collect())?;
+            DFSchema::new_with_metadata(key_fields.iter().cloned().chain(input_agg_fields).collect(), HashMap::new())?;
 
-        let ctx = ExecutionContextState {
-            catalog_list: Arc::new(MemoryCatalogList::new()),
-            scalar_functions: Default::default(),
-            var_provider: Default::default(),
-            aggregate_functions: Default::default(),
-            config: ExecutionConfig::new(),
-            execution_props: ExecutionProps::new(),
-        };
+        // TODO upgrade DF: Commented lines
+        let ctx = SessionStateBuilder::new()
+            // .with_config(config)
+            // .with_runtime_env(runtime)
+            // .with_catalog_list(MemoryCatalogProviderList::new())
+            .with_default_features()
+            .build();
+
+        // let ctx = ExecutionContextState {
+        //     catalog_list: Arc::new(MemoryCatalogList::new()),
+        //     scalar_functions: Default::default(),
+        //     var_provider: Default::default(),
+        //     aggregate_functions: Default::default(),
+        //     config: ExecutionConfig::new(),
+        //     execution_props: ExecutionProps::new(),
+        // };
         let agg_exprs = aggs
             .iter()
             .enumerate()
-            .map(|(i, f)| Expr::AggregateFunction {
-                fun: topk_fun_to_fusion_type(f).unwrap(),
+            .map(|(i, f)| Expr::AggregateFunction(AggregateFunction {
+                func: topk_fun_to_fusion_type(&ctx, f).unwrap(),
                 args: vec![Expr::Column(Column::from_name(format!("agg{}", i + 1)))],
                 distinct: false,
-            });
-        let physical_agg_exprs = agg_exprs
+                filter: None,
+                order_by: None,
+                null_treatment: None,
+            }));
+        let physical_agg_exprs: Vec<(AggregateFunctionExpr, Option<Arc<dyn PhysicalExpr>>, Option<Vec<datafusion::physical_expr::PhysicalSortExpr>>)> = agg_exprs
             .map(|e| {
-                Ok(DefaultPhysicalPlanner::default().create_aggregate_expr(
+                Ok(create_aggregate_expr_and_maybe_filter(
                     &e,
                     &input_schema,
-                    &input_schema.to_schema_ref(),
-                    &ctx,
+                    input_schema.inner(),
+                    ctx.execution_props(),
                 )?)
             })
             .collect::<Result<Vec<_>, DataFusionError>>()?;
+        let (agg_fn_exprs, agg_phys_exprs, _order_by): (Vec<_>, Vec<_>, Vec<_>) = itertools::multiunzip(physical_agg_exprs);
 
-        let output_agg_fields = physical_agg_exprs
+        let output_agg_fields = agg_fn_exprs
             .iter()
             .map(|agg| agg.field())
-            .collect::<Result<Vec<_>, DataFusionError>>()?;
+            .collect::<Vec<_>>();
         let output_schema = Arc::new(Schema::new(
             key_fields
                 .into_iter()
-                .map(|k| Field::new(k.name().as_ref(), k.data_type().clone(), k.is_nullable()))
+                .map(|(_, k)| Field::new(k.name(), k.data_type().clone(), k.is_nullable()))
                 .chain(output_agg_fields)
-                .collect(),
+                .collect::<Vec<_>>(),
         ));
 
         Ok(AggregateTopKExec::new(
             limit,
             key_len,
-            physical_agg_exprs,
+            agg_fn_exprs,
             aggs,
             order_by,
             None,
-            Arc::new(EmptyExec::new(input_schema.to_schema_ref())),
+            Arc::new(EmptyExec::new(input_schema.inner().clone())),
             output_schema,
         ))
     }
 
     async fn run_topk_as_batch(
-        proto: &AggregateTopKExec,
+        proto: Arc<AggregateTopKExec>,
         inputs: Vec<Vec<RecordBatch>>,
+        context: Arc<TaskContext>,
     ) -> Result<RecordBatch, DataFusionError> {
         let input = Arc::new(MemoryExec::try_new(&inputs, proto.cluster.schema(), None)?);
         let results = proto
             .with_new_children(vec![input])?
-            .execute(0)
-            .await?
+            .execute(0, context)?
             .collect::<Vec<_>>()
             .await
             .into_iter()
-            .collect::<Result<Vec<_>, ArrowError>>()?;
+            .collect::<Result<Vec<_>, DataFusionError>>()?;
         assert_eq!(results.len(), 1);
         Ok(results.into_iter().next().unwrap())
     }
@@ -1449,15 +1493,17 @@ mod tests {
     async fn run_topk(
         proto: &AggregateTopKExec,
         inputs: Vec<Vec<RecordBatch>>,
+        context: &Arc<TaskContext>,
     ) -> Result<Vec<Vec<i64>>, DataFusionError> {
-        return Ok(to_vec(&run_topk_as_batch(proto, inputs).await?));
+        return Ok(to_vec(&run_topk_as_batch(Arc::new(proto.clone()), inputs, context.clone()).await?));
     }
 
     async fn run_topk_opt(
         proto: &AggregateTopKExec,
         inputs: Vec<Vec<RecordBatch>>,
+        context: &Arc<TaskContext>,
     ) -> Result<Vec<Vec<Option<i64>>>, DataFusionError> {
-        return Ok(to_opt_vec(&run_topk_as_batch(proto, inputs).await?));
+        return Ok(to_opt_vec(&run_topk_as_batch(Arc::new(proto.clone()), inputs, context.clone()).await?));
     }
 
     fn to_opt_vec(b: &RecordBatch) -> Vec<Vec<Option<i64>>> {
