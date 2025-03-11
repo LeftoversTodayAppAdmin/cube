@@ -400,6 +400,10 @@ pub fn plan_topk(
     )?);
 
     let aggregate_schema = aggregate.schema();
+    // This is only used in make_sort_expr with HllCardinality, which doesn't use the schema in
+    // create_physical_expr.  So this value is unused.  Which means that creating a DFSchema that is
+    // missing qualifiers and other info is okay.
+    let aggregate_dfschema = Arc::new(DFSchema::try_from(aggregate_schema.clone())?);
 
     let agg_fun = node
         .aggregate_expr
@@ -419,7 +423,7 @@ pub fn plan_topk(
                     &agg_fun[c.agg_index].0,
                     Arc::new(Column::new(aggregate_schema.field(i).name(), i)),
                     agg_fun[c.agg_index].1,
-                    logical_input_schema,  // TODO upgrade DF: What?
+                    &aggregate_dfschema,
                 ),
                 options: SortOptions {
                     descending: !c.asc,
@@ -468,6 +472,9 @@ fn make_sort_expr(
     args: &[Expr],
     logical_schema: &DFSchema,
 ) -> Arc<dyn PhysicalExpr> {
+    // Note that logical_schema is computed by our caller from schema, may lack qualifiers or other
+    // info, and this works OK because HllCardinality's trait implementation functions don't use the
+    // schema in create_physical_expr.
     match fun {
         TopKAggregateFunction::Merge => create_physical_expr(
             &scalar_udf_by_kind(CubeScalarUDFKind::HllCardinality),
