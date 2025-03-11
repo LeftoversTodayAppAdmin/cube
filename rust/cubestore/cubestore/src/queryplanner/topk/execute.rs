@@ -295,8 +295,8 @@ struct Group {
 }
 
 impl Group {
-    fn estimate(&mut self) -> Result<SmallVec<[ScalarValue; 1]>, DataFusionError> {
-        self.estimates.iter_mut().map(|e| e.evaluate()).collect()
+    fn estimate(&self) -> Result<SmallVec<[ScalarValue; 1]>, DataFusionError> {
+        self.estimates.iter().map(|e| e.peek_evaluate()).collect()
     }
 
     fn estimate_correct(&self) -> bool {
@@ -675,12 +675,12 @@ impl TopKState<'_> {
     /// Returns true iff the estimate matches the correct score.
     fn update_group_estimates(&self, group: &mut Group) -> Result<(), DataFusionError> {
         for i in 0..group.estimates.len() {
-            group.estimates[i].reset();
+            group.estimates[i].reset()?;
             Self::merge_single_state(group.estimates[i].as_mut(), group.accumulators[i].peek_state()?)?;
             // Node estimate might contain a neutral value (e.g. '0' for sum), but we must avoid
             // giving invalid estimates for NULL values.
             let use_node_estimates =
-                !self.agg_descr[i].1.nulls_first || !group.estimates[i].evaluate()?.is_null();
+                !self.agg_descr[i].1.nulls_first || !group.estimates[i].peek_evaluate()?.is_null();
             for node in 0..group.nodes.len() {
                 if !group.nodes[node] {
                     if self.finished_nodes[node] {
@@ -704,10 +704,10 @@ impl TopKState<'_> {
         row_i: usize,
     ) -> Result<(), DataFusionError> {
         for (i, acc) in estimates.iter_mut().enumerate() {
-            acc.reset();
+            acc.reset()?;
 
             // evaluate() gives us a scalar value of the required type.
-            let mut neutral = acc.evaluate()?;
+            let mut neutral = acc.peek_evaluate()?;
             to_neutral_value(&mut neutral, &agg_descr[i].0);
 
             acc.update_batch(&vec![columns[key_len + i].slice(row_i, 1)])?;
@@ -717,12 +717,12 @@ impl TopKState<'_> {
             // We have to provide correct estimates.
             let o = cmp_same_types(
                 &neutral,
-                &acc.evaluate()?,
+                &acc.peek_evaluate()?,
                 agg_descr[i].1.nulls_first,
                 !agg_descr[i].1.descending,
             );
             if o < Ordering::Equal {
-                acc.reset();
+                acc.reset()?;
             }
         }
         Ok(())
@@ -969,7 +969,7 @@ fn finalize_aggregation_into(
             let mut col_i = 0;
             for a in accumulators {
                 // build the vector of states
-                for v in a.state()? {
+                for v in a.peek_state()? {
                     if add_columns {
                         columns.push(create_builder(&v));
                         assert_eq!(col_i + 1, columns.len());
@@ -982,7 +982,7 @@ fn finalize_aggregation_into(
         AggregateMode::Final | AggregateMode::FinalPartitioned | AggregateMode::Single | AggregateMode::SinglePartitioned => {
             for i in 0..accumulators.len() {
                 // merge the state to the final value
-                let v = accumulators[i].evaluate()?;
+                let v = accumulators[i].peek_evaluate()?;
                 if add_columns {
                     columns.push(create_builder(&v));
                     assert_eq!(i + 1, columns.len());
@@ -1000,7 +1000,6 @@ mod tests {
     use crate::queryplanner::topk::{AggregateTopKExec, SortColumn};
     use datafusion::arrow::array::{Array, ArrayRef, Int64Array};
     use datafusion::arrow::datatypes::{DataType, Field, Schema, SchemaRef};
-    use datafusion::arrow::error::ArrowError;
     use datafusion::arrow::record_batch::RecordBatch;
     use datafusion::common::{Column, DFSchema};
     // TODO upgrade DF
@@ -1009,16 +1008,10 @@ mod tests {
     use datafusion::execution::{SessionState, SessionStateBuilder};
     use datafusion::logical_expr::expr::AggregateFunction;
     use datafusion::logical_expr::AggregateUDF;
-    // TODO upgrade DF
-    // use datafusion::execution::context::{ExecutionConfig, ExecutionContextState, ExecutionProps};
-    // use datafusion::logical_plan::{Column, DFField, DFSchema, Expr};
-    // use datafusion::physical_plan::aggregates::AggregateFunction;
     use datafusion::physical_plan::empty::EmptyExec;
     use datafusion::physical_plan::memory::MemoryExec;
-    // TODO upgrade DF
-    // use datafusion::physical_plan::planner::DefaultPhysicalPlanner;
     use datafusion::physical_plan::ExecutionPlan;
-    use datafusion::physical_planner::{create_aggregate_expr_and_maybe_filter, DefaultPhysicalPlanner};
+    use datafusion::physical_planner::create_aggregate_expr_and_maybe_filter;
     use datafusion::prelude::Expr;
     use futures::StreamExt;
     use itertools::Itertools;
