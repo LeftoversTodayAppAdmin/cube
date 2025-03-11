@@ -64,8 +64,7 @@ use datafusion::execution::{SessionState, TaskContext};
 use datafusion::logical_expr::expr::Alias;
 use datafusion::logical_expr::utils::expr_to_columns;
 use datafusion::logical_expr::{
-    expr, Aggregate, BinaryExpr, Expr, Extension, Filter, Join, Limit, LogicalPlan, Operator,
-    Projection, Sort, SortExpr, SubqueryAlias, TableScan, Union, Unnest, UserDefinedLogicalNode,
+    expr, logical_plan, Aggregate, BinaryExpr, Expr, Extension, Filter, Join, Limit, LogicalPlan, Operator, Projection, Sort, SortExpr, SubqueryAlias, TableScan, Union, Unnest, UserDefinedLogicalNode
 };
 use datafusion::physical_expr::{Distribution, LexRequirement};
 use datafusion::physical_plan::repartition::RepartitionExec;
@@ -1673,9 +1672,9 @@ impl ExtensionPlanner for CubeExtensionPlanner {
                 false,
                 usize::MAX,
                 cs.limit_and_reverse.clone(),
-                find_cluster_send_cut_point.result.ok_or_else(|| {
+                Some(find_cluster_send_cut_point.result.ok_or_else(|| {
                     CubeError::internal("ClusterSend cut point not found".to_string())
-                })?,
+                })?),
             )?))
         } else if let Some(topk) = node.as_any().downcast_ref::<ClusterAggregateTopK>() {
             assert_eq!(inputs.len(), 1);
@@ -1698,7 +1697,7 @@ impl CubeExtensionPlanner {
         use_streaming: bool,
         max_batch_rows: usize,
         limit_and_reverse: Option<(usize, bool)>,
-        logical_plan_to_send: &LogicalPlan,
+        logical_plan_to_send: Option<&LogicalPlan>,
     ) -> Result<Arc<dyn ExecutionPlan>, DataFusionError> {
         if snapshots.is_empty() {
             return Ok(Arc::new(EmptyExec::new(input.schema())));
@@ -1707,10 +1706,11 @@ impl CubeExtensionPlanner {
         if let Some(c) = self.cluster.as_ref() {
             Ok(Arc::new(ClusterSendExec::new(
                 c.clone(),
-                Arc::new(
-                    self.serialized_plan
-                        .replace_logical_plan(logical_plan_to_send.clone())?,
-                ),
+                if let Some(logical_plan_to_send) = logical_plan_to_send {
+                    Arc::new(self.serialized_plan.replace_logical_plan(logical_plan_to_send.clone())?)
+                } else {
+                    self.serialized_plan.clone()
+                },
                 snapshots,
                 input,
                 use_streaming,

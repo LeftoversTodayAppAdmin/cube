@@ -439,7 +439,7 @@ pub fn plan_topk(
         /*use_streaming*/ true,
         /*max_batch_rows*/ max(2 * node.limit, MIN_TOPK_STREAM_ROWS),
         None,
-        &node.input,  // TODO upgrade DF: What is this?  Placeholder value.  Added in rolling window.  Probably breaks everything.
+        None,
     )?;
 
     let having = if let Some(predicate) = &node.having_expr {
