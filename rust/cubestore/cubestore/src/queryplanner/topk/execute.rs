@@ -117,8 +117,7 @@ impl AggregateTopKExec {
         agg_descr
     }
 
-    // TODO upgrade DF: Re-uncomment
-    // #[cfg(test)]
+    #[cfg(test)]
     fn change_order(&mut self, order_by: Vec<SortColumn>) {
         self.agg_descr = Self::compute_descr(
             &self.agg_expr,
