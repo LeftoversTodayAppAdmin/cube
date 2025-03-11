@@ -55,6 +55,18 @@ pub struct PPOptions {
     pub show_check_memory_nodes: bool,
 }
 
+impl PPOptions {
+    pub fn everything() -> PPOptions {
+        PPOptions {
+            show_filters: true,
+            show_sort_by: true,
+            show_aggregations: true,
+            show_output_hints: true,
+            show_check_memory_nodes: true,
+        }
+    }
+}
+
 pub fn pp_phys_plan(p: &dyn ExecutionPlan) -> String {
     pp_phys_plan_ext(p, &PPOptions::default())
 }
