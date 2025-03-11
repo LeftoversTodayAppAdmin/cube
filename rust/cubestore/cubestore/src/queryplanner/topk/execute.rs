@@ -666,11 +666,17 @@ impl TopKState<'_> {
         Ok(self.result)
     }
 
+    fn merge_single_state(acc: &mut dyn Accumulator, state: Vec<ScalarValue>) -> Result<(), DataFusionError> {
+        // TODO upgrade DF: This allocates and produces a lot of fluff here.
+        let single_row_columns = state.into_iter().map(|scalar| scalar.to_array()).collect::<Result<Vec<_>, _>>()?;
+        acc.merge_batch(single_row_columns.as_slice())
+    }
+
     /// Returns true iff the estimate matches the correct score.
     fn update_group_estimates(&self, group: &mut Group) -> Result<(), DataFusionError> {
         for i in 0..group.estimates.len() {
             group.estimates[i].reset();
-            group.estimates[i].merge(&group.accumulators[i].state()?)?;
+            Self::merge_single_state(group.estimates[i].as_mut(), group.accumulators[i].peek_state()?)?;
             // Node estimate might contain a neutral value (e.g. '0' for sum), but we must avoid
             // giving invalid estimates for NULL values.
             let use_node_estimates =
@@ -682,7 +688,7 @@ impl TopKState<'_> {
                         continue;
                     }
                     if use_node_estimates {
-                        group.estimates[i].merge(&self.node_estimates[node][i].state()?)?;
+                        Self::merge_single_state(group.estimates[i].as_mut(), self.node_estimates[node][i].peek_state()?)?;
                     }
                 }
             }

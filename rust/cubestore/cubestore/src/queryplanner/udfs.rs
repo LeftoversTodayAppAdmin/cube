@@ -654,6 +654,11 @@ impl Accumulator for HllMergeAccumulator {
     }
 
     fn evaluate(&mut self) -> Result<ScalarValue, DataFusionError> {
+        self.peek_evaluate()
+    }
+
+    // Cube ext:
+    fn peek_evaluate(&self) -> Result<ScalarValue, DataFusionError> {
         let v;
         match &self.acc {
             None => v = Vec::new(),
@@ -694,6 +699,18 @@ impl Accumulator for HllMergeAccumulator {
         } else {
             return Err(CubeError::internal("invalid state in MERGE".to_string()).into());
         }
+    }
+
+
+    fn reset(&mut self) -> Result<(), DataFusionError> {
+        self.acc = None;
+        Ok(())
+    }
+    fn peek_state(&self) -> Result<Vec<ScalarValue>, DataFusionError> {
+        Ok(vec![self.peek_evaluate()?])
+    }
+    fn supports_cube_ext(&self) -> bool {
+        true
     }
 }
 
