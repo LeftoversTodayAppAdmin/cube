@@ -12,6 +12,7 @@ use datafusion::error::DataFusionError;
 use datafusion::execution::SessionState;
 use datafusion::logical_expr::expr::{AggregateFunction, Alias, ScalarFunction};
 use datafusion::logical_expr::expr::physical_name;
+use datafusion::physical_expr::PhysicalSortRequirement;
 use datafusion::physical_plan::aggregates::{AggregateExec, AggregateMode, PhysicalGroupBy};
 use datafusion::physical_plan::expressions::{Column, PhysicalSortExpr};
 use datafusion::physical_plan::sorts::sort::SortExec;
@@ -432,6 +433,7 @@ pub fn plan_topk(
             }
         })
         .collect_vec();
+    let sort_requirement = sort_expr.iter().map(|e| PhysicalSortRequirement::from(e.clone())).collect::<Vec<_>>();
     let sort = Arc::new(SortExec::new(sort_expr, aggregate));
     let sort_schema = sort.schema();
 
@@ -461,11 +463,12 @@ pub fn plan_topk(
         having,
         cluster,
         schema,
+        sort_requirement,
     ));
     Ok(topk_exec)
 }
 
-fn make_sort_expr(
+pub fn make_sort_expr(
     schema: &Arc<Schema>,
     fun: &TopKAggregateFunction,
     col: Arc<dyn PhysicalExpr>,

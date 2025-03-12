@@ -11,7 +11,7 @@ use datafusion::error::DataFusionError;
 
 use datafusion::execution::TaskContext;
 use datafusion::logical_expr::Accumulator;
-use datafusion::physical_expr::EquivalenceProperties;
+use datafusion::physical_expr::{EquivalenceProperties, LexRequirement, PhysicalSortRequirement};
 use datafusion::physical_plan::aggregates::{create_accumulators, AccumulatorItem, AggregateMode};
 use datafusion::physical_plan::common::collect;
 use datafusion::physical_plan::filter::FilterExec;
@@ -56,7 +56,8 @@ pub struct AggregateTopKExec {
     /// Always an instance of ClusterSendExec or WorkerExec.
     pub cluster: Arc<dyn ExecutionPlan>,
     pub schema: SchemaRef,
-    cache: PlanProperties,
+    pub cache: PlanProperties,
+    pub sort_requirement: LexRequirement,
 }
 
 /// Third item is the neutral value for the corresponding aggregate function.
@@ -72,6 +73,8 @@ impl AggregateTopKExec {
         having: Option<Arc<dyn PhysicalExpr>>,
         cluster: Arc<dyn ExecutionPlan>,
         schema: SchemaRef,
+        // sort_requirement is passed in by topk_plan mostly for the sake of code deduplication
+        sort_requirement: LexRequirement,
     ) -> AggregateTopKExec {
         assert_eq!(schema.fields().len(), agg_expr.len() + key_len);
         assert_eq!(agg_fun.len(), agg_expr.len());
@@ -95,6 +98,7 @@ impl AggregateTopKExec {
             cluster,
             schema,
             cache,
+            sort_requirement,
         }
     }
 
@@ -171,11 +175,18 @@ impl ExecutionPlan for AggregateTopKExec {
             cluster,
             schema: self.schema.clone(),
             cache: self.cache.clone(),
+            sort_requirement: self.sort_requirement.clone(),
         }))
     }
 
     fn properties(&self) -> &PlanProperties {
         &self.cache
+    }
+
+    // TODO upgrade DF: Probably should include output ordering in the PlanProperties.
+
+    fn required_input_ordering(&self) -> Vec<Option<LexRequirement>> {
+        vec![Some(self.sort_requirement.clone())]
     }
 
     #[tracing::instrument(level = "trace", skip(self))]
@@ -996,6 +1007,7 @@ fn finalize_aggregation_into(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::queryplanner::topk::plan::make_sort_expr;
     use crate::queryplanner::topk::{AggregateTopKExec, SortColumn};
     use datafusion::arrow::array::{Array, ArrayRef, Int64Array};
     use datafusion::arrow::datatypes::{DataType, Field, Schema, SchemaRef};
@@ -1418,17 +1430,21 @@ mod tests {
         //     config: ExecutionConfig::new(),
         //     execution_props: ExecutionProps::new(),
         // };
-        let agg_exprs = aggs
+        let agg_functions = aggs
             .iter()
             .enumerate()
-            .map(|(i, f)| Expr::AggregateFunction(AggregateFunction {
+            .map(|(i, f)| AggregateFunction {
                 func: topk_fun_to_fusion_type(&ctx, f).unwrap(),
                 args: vec![Expr::Column(Column::from_name(format!("agg{}", i + 1)))],
                 distinct: false,
                 filter: None,
                 order_by: None,
                 null_treatment: None,
-            }));
+            })
+            .collect::<Vec<_>>();
+        let agg_exprs = agg_functions.iter().map(|agg_fn|
+            Expr::AggregateFunction(agg_fn.clone())
+        );
         let physical_agg_exprs: Vec<(AggregateFunctionExpr, Option<Arc<dyn PhysicalExpr>>, Option<Vec<datafusion::physical_expr::PhysicalSortExpr>>)> = agg_exprs
             .map(|e| {
                 Ok(create_aggregate_expr_and_maybe_filter(
@@ -1439,7 +1455,7 @@ mod tests {
                 )?)
             })
             .collect::<Result<Vec<_>, DataFusionError>>()?;
-        let (agg_fn_exprs, agg_phys_exprs, _order_by): (Vec<_>, Vec<_>, Vec<_>) = itertools::multiunzip(physical_agg_exprs);
+        let (agg_fn_exprs, _agg_phys_exprs, _order_by): (Vec<_>, Vec<_>, Vec<_>) = itertools::multiunzip(physical_agg_exprs);
 
         let output_agg_fields = agg_fn_exprs
             .iter()
@@ -1453,6 +1469,23 @@ mod tests {
                 .collect::<Vec<_>>(),
         ));
 
+        let sort_requirement = order_by.iter().map(|c| {
+            let i = key_len + c.agg_index;
+            PhysicalSortRequirement {
+                expr: make_sort_expr(
+                    &input_schema.inner(),
+                    &aggs[c.agg_index],
+                    Arc::new(datafusion::physical_expr::expressions::Column::new(input_schema.field(i).name(), i)),
+                    &agg_functions[c.agg_index].args,
+                    &input_schema,
+                ),
+                options: Some(SortOptions {
+                    descending: !c.asc,
+                    nulls_first: c.nulls_first,
+                }),
+            }
+        }).collect();
+
         Ok(AggregateTopKExec::new(
             limit,
             key_len,
@@ -1462,6 +1495,7 @@ mod tests {
             None,
             Arc::new(EmptyExec::new(input_schema.inner().clone())),
             output_schema,
+            sort_requirement,
         ))
     }
 
