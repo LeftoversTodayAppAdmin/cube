@@ -59,13 +59,15 @@ pub fn push_aggregate_to_workers(
     } else if let Some(w) = agg.input().as_any().downcast_ref::<WorkerExec>() {
         let worker_input = p_partial.clone().with_new_children(vec![w.input.clone()])?;
 
+        // TODO upgrade DF: both cs.with_changed_schema and this need required_input_ordering if we have a sorted (inplace) aggregate pair here
+
         // Worker plan, execute partial aggregate inside the worker.
-        Arc::new(WorkerExec {
-            input: worker_input,
-            max_batch_rows: w.max_batch_rows,
-            limit_and_reverse: w.limit_and_reverse.clone(),
-            required_input_ordering: None,
-        })
+        Arc::new(WorkerExec::new(
+            worker_input,
+            w.max_batch_rows,
+            w.limit_and_reverse.clone(),
+            /* required_input_ordering */ None,
+        ))
     } else {
         return Ok(p_final);
     };

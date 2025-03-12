@@ -1284,7 +1284,7 @@ impl ClusterSendExec {
         })
     }
 
-    fn compute_properties(
+    pub fn compute_properties(
         input_properties: &PlanProperties,
         partitions_num: usize,
     ) -> PlanProperties {

@@ -155,10 +155,10 @@ impl ExecutionPlan for PanicWorkerExec {
 }
 
 pub fn plan_panic_worker() -> Result<Arc<dyn ExecutionPlan>, DataFusionError> {
-    Ok(Arc::new(WorkerExec {
-        input: Arc::new(PanicWorkerExec::new()),
-        max_batch_rows: 1,
-        limit_and_reverse: None,
-        required_input_ordering: None,
-    }))
+    Ok(Arc::new(WorkerExec::new(
+        Arc::new(PanicWorkerExec::new()),
+        /* max_batch_rows */ 1,
+        /* limit_and_reverse */ None,
+        /* required_input_ordering */ None,
+    )))
 }

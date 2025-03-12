@@ -1719,12 +1719,13 @@ impl CubeExtensionPlanner {
                 required_input_ordering,
             )?))
         } else {
-            Ok(Arc::new(WorkerExec {
+            Ok(Arc::new(WorkerExec::new(
                 input,
                 max_batch_rows,
                 limit_and_reverse,
                 required_input_ordering,
-            }))
+
+            )))
         }
     }
 }
@@ -1737,6 +1738,27 @@ pub struct WorkerExec {
     pub max_batch_rows: usize,
     pub limit_and_reverse: Option<(usize, bool)>,
     pub required_input_ordering: Option<LexRequirement>,
+    properties: PlanProperties,
+}
+
+impl WorkerExec {
+    pub fn new(
+        input: Arc<dyn ExecutionPlan>,
+        max_batch_rows: usize,
+        limit_and_reverse: Option<(usize, bool)>,
+        required_input_ordering: Option<LexRequirement>,
+    ) -> WorkerExec {
+        // TODO upgrade DF: Use partitions_num parameter.
+        let partitions_num = 1;  // TODO upgrade DF: No.
+        let properties = input.properties().clone().with_partitioning(Partitioning::UnknownPartitioning(partitions_num));
+        WorkerExec {
+            input,
+            max_batch_rows,
+            limit_and_reverse,
+            required_input_ordering,
+            properties,
+        }
+    }
 }
 
 impl DisplayAs for WorkerExec {
@@ -1766,6 +1788,7 @@ impl ExecutionPlan for WorkerExec {
             max_batch_rows: self.max_batch_rows,
             limit_and_reverse: self.limit_and_reverse.clone(),
             required_input_ordering: self.required_input_ordering.clone(),
+            properties: self.properties.clone(),
         }))
     }
 
@@ -1782,6 +1805,7 @@ impl ExecutionPlan for WorkerExec {
     }
 
     fn properties(&self) -> &PlanProperties {
+        // TODO upgrade DF: No.
         self.input.properties()
     }
 
