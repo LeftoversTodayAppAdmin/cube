@@ -446,6 +446,7 @@ pub fn plan_topk(
         /*max_batch_rows*/ max(2 * node.limit, MIN_TOPK_STREAM_ROWS),
         None,
         None,
+        Some(sort_requirement.clone()),
     )?;
 
     let having = if let Some(predicate) = &node.having_expr {

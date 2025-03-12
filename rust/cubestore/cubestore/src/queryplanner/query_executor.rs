@@ -1240,6 +1240,8 @@ pub struct ClusterSendExec {
     pub cluster: Arc<dyn Cluster>,
     pub serialized_plan: Arc<PreSerializedPlan>,
     pub use_streaming: bool,
+    // Used to prevent SortExec on workers (e.g. with ClusterAggregateTopK) from being optimized away.
+    pub required_input_ordering: Option<LexRequirement>,
 }
 
 pub type PartitionWithFilters = (u64, RowRange);
@@ -1261,6 +1263,7 @@ impl ClusterSendExec {
         union_snapshots: &[Snapshots],
         input_for_optimizations: Arc<dyn ExecutionPlan>,
         use_streaming: bool,
+        required_input_ordering: Option<LexRequirement>,
     ) -> Result<Self, CubeError> {
         let partitions = Self::distribute_to_workers(
             cluster.config().as_ref(),
@@ -1277,6 +1280,7 @@ impl ClusterSendExec {
             serialized_plan,
             input_for_optimizations,
             use_streaming,
+            required_input_ordering,
         })
     }
 
@@ -1509,6 +1513,7 @@ impl ClusterSendExec {
             serialized_plan: self.serialized_plan.clone(),
             input_for_optimizations,
             use_streaming: self.use_streaming,
+            required_input_ordering: None,
         }
     }
 
@@ -1574,6 +1579,7 @@ impl ExecutionPlan for ClusterSendExec {
             serialized_plan: self.serialized_plan.clone(),
             input_for_optimizations,
             use_streaming: self.use_streaming,
+            required_input_ordering: self.required_input_ordering.clone(),
         }))
     }
 
@@ -1621,6 +1627,10 @@ impl ExecutionPlan for ClusterSendExec {
 
     fn properties(&self) -> &PlanProperties {
         &self.properties
+    }
+
+    fn required_input_ordering(&self) -> Vec<Option<LexRequirement>> {
+        vec![self.required_input_ordering.clone()]
     }
 
     fn maintains_input_order(&self) -> Vec<bool> {

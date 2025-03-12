@@ -64,6 +64,7 @@ pub fn push_aggregate_to_workers(
             input: worker_input,
             max_batch_rows: w.max_batch_rows,
             limit_and_reverse: w.limit_and_reverse.clone(),
+            required_input_ordering: None,
         })
     } else {
         return Ok(p_final);

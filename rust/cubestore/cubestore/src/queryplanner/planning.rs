@@ -1675,6 +1675,7 @@ impl ExtensionPlanner for CubeExtensionPlanner {
                 Some(find_cluster_send_cut_point.result.ok_or_else(|| {
                     CubeError::internal("ClusterSend cut point not found".to_string())
                 })?),
+                /* required input ordering */ None,
             )?))
         } else if let Some(topk) = node.as_any().downcast_ref::<ClusterAggregateTopK>() {
             assert_eq!(inputs.len(), 1);
@@ -1698,6 +1699,7 @@ impl CubeExtensionPlanner {
         max_batch_rows: usize,
         limit_and_reverse: Option<(usize, bool)>,
         logical_plan_to_send: Option<&LogicalPlan>,
+        required_input_ordering: Option<LexRequirement>,
     ) -> Result<Arc<dyn ExecutionPlan>, DataFusionError> {
         if snapshots.is_empty() {
             return Ok(Arc::new(EmptyExec::new(input.schema())));
@@ -1714,12 +1716,14 @@ impl CubeExtensionPlanner {
                 snapshots,
                 input,
                 use_streaming,
+                required_input_ordering,
             )?))
         } else {
             Ok(Arc::new(WorkerExec {
                 input,
                 max_batch_rows,
                 limit_and_reverse,
+                required_input_ordering,
             }))
         }
     }
@@ -1732,6 +1736,7 @@ pub struct WorkerExec {
     pub input: Arc<dyn ExecutionPlan>,
     pub max_batch_rows: usize,
     pub limit_and_reverse: Option<(usize, bool)>,
+    pub required_input_ordering: Option<LexRequirement>,
 }
 
 impl DisplayAs for WorkerExec {
@@ -1760,6 +1765,7 @@ impl ExecutionPlan for WorkerExec {
             input,
             max_batch_rows: self.max_batch_rows,
             limit_and_reverse: self.limit_and_reverse.clone(),
+            required_input_ordering: self.required_input_ordering.clone(),
         }))
     }
 
@@ -1781,6 +1787,10 @@ impl ExecutionPlan for WorkerExec {
 
     fn required_input_distribution(&self) -> Vec<Distribution> {
         vec![Distribution::SinglePartition; self.children().len()]
+    }
+
+    fn required_input_ordering(&self) -> Vec<Option<LexRequirement>> {
+        vec![self.required_input_ordering.clone()]
     }
 
     fn maintains_input_order(&self) -> Vec<bool> {
