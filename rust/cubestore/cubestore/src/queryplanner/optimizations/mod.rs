@@ -29,6 +29,7 @@ use datafusion::logical_expr::LogicalPlan;
 use datafusion::physical_optimizer::PhysicalOptimizerRule;
 use datafusion::physical_plan::ExecutionPlan;
 use datafusion::physical_planner::{DefaultPhysicalPlanner, PhysicalPlanner};
+use distributed_partial_aggregate::ensure_partition_merge_with_acceptable_parent;
 use rewrite_plan::rewrite_physical_plan;
 use std::sync::Arc;
 use trace_data_loaded::add_trace_data_loaded_exec;
@@ -145,7 +146,11 @@ fn pre_optimize_physical_plan(
 ) -> Result<Arc<dyn ExecutionPlan>, DataFusionError> {
     // TODO upgrade DF
     let p = rewrite_physical_plan(p, &mut |p| push_aggregate_to_workers(p))?;
-    let p = rewrite_physical_plan(p, &mut |p| ensure_partition_merge(p))?;
+
+    // Handles non-root-node cases
+    let p = rewrite_physical_plan(p, &mut |p| ensure_partition_merge_with_acceptable_parent(p))?;
+    // Handles the root node case
+    let p = ensure_partition_merge(p)?;
     Ok(p)
 }
 

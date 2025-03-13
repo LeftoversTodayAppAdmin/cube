@@ -1,7 +1,9 @@
 use crate::queryplanner::planning::WorkerExec;
 use crate::queryplanner::query_executor::ClusterSendExec;
 use crate::queryplanner::tail_limit::TailLimitExec;
+use crate::queryplanner::topk::AggregateTopKExec;
 use datafusion::error::DataFusionError;
+use datafusion::physical_optimizer::topk_aggregation::TopKAggregation;
 use datafusion::physical_plan::aggregates::{AggregateExec, AggregateMode};
 use datafusion::physical_plan::coalesce_partitions::CoalescePartitionsExec;
 use datafusion::physical_plan::limit::GlobalLimitExec;
@@ -90,15 +92,15 @@ pub fn push_aggregate_to_workers(
     )?))
 }
 
-// TODO upgrade DF: this one was handled by something else but most likely only in sorted scenario
-pub fn ensure_partition_merge(
+pub fn ensure_partition_merge_helper(
     p: Arc<dyn ExecutionPlan>,
+    new_child: &mut bool,
 ) -> Result<Arc<dyn ExecutionPlan>, DataFusionError> {
     if p.as_any().is::<ClusterSendExec>()
         || p.as_any().is::<WorkerExec>()
         || p.as_any().is::<UnionExec>()
     {
-        if let Some(ordering) = p.output_ordering() {
+        let rewritten: Arc<dyn ExecutionPlan> = if let Some(ordering) = p.output_ordering() {
             let ordering = ordering.to_vec();
             let merged_children = p
                 .children()
@@ -107,8 +109,8 @@ pub fn ensure_partition_merge(
                     Arc::new(SortPreservingMergeExec::new(ordering.clone(), c.clone()))
                 })
                 .collect();
-            let new_plan = p.with_new_children(merged_children)?;
-            Ok(Arc::new(SortPreservingMergeExec::new(ordering, new_plan)))
+            let new_plan = p.clone().with_new_children(merged_children)?;
+            Arc::new(SortPreservingMergeExec::new(ordering, new_plan))
         } else {
             let merged_children = p
                 .children()
@@ -117,11 +119,48 @@ pub fn ensure_partition_merge(
                     Arc::new(CoalescePartitionsExec::new(c.clone()))
                 })
                 .collect();
-            let new_plan = p.with_new_children(merged_children)?;
-            Ok(Arc::new(CoalescePartitionsExec::new(new_plan)))
-        }
+            let new_plan = p.clone().with_new_children(merged_children)?;
+            Arc::new(CoalescePartitionsExec::new(new_plan))
+        };
+        *new_child = true;
+        Ok(rewritten)
     } else {
         Ok(p)
+    }
+}
+
+pub fn ensure_partition_merge(
+    p: Arc<dyn ExecutionPlan>,
+) -> Result<Arc<dyn ExecutionPlan>, DataFusionError> {
+    let mut new_child = false;
+    ensure_partition_merge_helper(p, &mut new_child)
+}
+
+// TODO upgrade DF: this one was handled by something else but most likely only in sorted scenario
+pub fn ensure_partition_merge_with_acceptable_parent(
+    parent: Arc<dyn ExecutionPlan>,
+) -> Result<Arc<dyn ExecutionPlan>, DataFusionError> {
+    // TODO upgrade DF: Figure out the right clean way to handle this function in general --
+    // possibly involving uncommenting EnforceDistribution, and having this
+    // SortPreservingMergeExec/CoalescePartitionsExec wrapping the ClusterSendExec node as we
+    // construct the query.
+
+    // Special case, don't do this inside AggregateTopKExec-ClusterSendExec-Aggregate because we
+    // need the partitioning: (This is gross.)
+    if parent.as_any().is::<AggregateTopKExec>() {
+        return Ok(parent);
+    }
+
+    let mut any_new_children = false;
+    let mut new_children = Vec::new();
+
+    for p in parent.children() {
+        new_children.push(ensure_partition_merge_helper(p.clone(), &mut any_new_children)?);
+    }
+    if any_new_children {
+        parent.with_new_children(new_children)
+    } else {
+        Ok(parent)
     }
 }
 
