@@ -358,8 +358,6 @@ pub fn plan_topk(
     input: Arc<dyn ExecutionPlan>,
     ctx: &SessionState,
 ) -> Result<Arc<dyn ExecutionPlan>, DataFusionError> {
-    println!("Planning topk node: {}\n{}", pp_topk_line(node), pp_plan(node.input.as_ref()));
-
     // Partial aggregate on workers. Mimics corresponding planning code from DataFusion.
     let physical_input_schema = input.schema();
     let logical_input_schema = node.input.schema();
