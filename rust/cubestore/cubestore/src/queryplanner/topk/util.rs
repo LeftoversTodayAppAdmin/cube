@@ -66,10 +66,10 @@ pub fn create_builder(s: &ScalarValue) -> Box<dyn ArrayBuilder> {
                 .expect("unsupported inner list type");
             cube_match_scalar!(dummy, create_list_builder)
         }};
-        ($v: expr, Decimal128Builder, $(, $rest: tt)*) => {{
+        ($v: expr, Decimal128Builder $(, $rest: tt)*) => {{
             Box::new(Decimal128Builder::new().with_data_type(s.data_type()))
         }};
-        ($v: expr, Decimal256Builder, $(, $rest: tt)*) => {{
+        ($v: expr, Decimal256Builder $(, $rest: tt)*) => {{
             Box::new(Decimal256Builder::new().with_data_type(s.data_type()))
         }};
         ($v: expr, $builder: tt $(, $rest: tt)*) => {{
