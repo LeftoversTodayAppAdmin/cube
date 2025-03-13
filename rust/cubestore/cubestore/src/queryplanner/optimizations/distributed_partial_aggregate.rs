@@ -50,23 +50,24 @@ pub fn push_aggregate_to_workers(
         let clustersend_input = p_partial.clone()
                     .with_new_children(vec![cs.input_for_optimizations.clone()])?;
 
+        // Note that required_input_ordering is applicable when p_final_agg has a Sorted input mode.
+
         // Router plan, replace partial aggregate with cluster send.
         Arc::new(
             cs.with_changed_schema(
                 clustersend_input,
+                p_final_agg.required_input_ordering().into_iter().next().unwrap(),
             ),
         )
     } else if let Some(w) = agg.input().as_any().downcast_ref::<WorkerExec>() {
         let worker_input = p_partial.clone().with_new_children(vec![w.input.clone()])?;
-
-        // TODO upgrade DF: both cs.with_changed_schema and this need required_input_ordering if we have a sorted (inplace) aggregate pair here
 
         // Worker plan, execute partial aggregate inside the worker.
         Arc::new(WorkerExec::new(
             worker_input,
             w.max_batch_rows,
             w.limit_and_reverse.clone(),
-            /* required_input_ordering */ None,
+            p_final_agg.required_input_ordering().into_iter().next().unwrap(),
         ))
     } else {
         return Ok(p_final);

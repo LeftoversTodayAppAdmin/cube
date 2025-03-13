@@ -1502,7 +1502,7 @@ impl ClusterSendExec {
         r
     }
 
-    pub fn with_changed_schema(&self, input_for_optimizations: Arc<dyn ExecutionPlan>) -> Self {
+    pub fn with_changed_schema(&self, input_for_optimizations: Arc<dyn ExecutionPlan>, new_required_input_ordering: Option<LexRequirement>) -> Self {
         ClusterSendExec {
             properties: Self::compute_properties(
                 input_for_optimizations.properties(),
@@ -1513,7 +1513,7 @@ impl ClusterSendExec {
             serialized_plan: self.serialized_plan.clone(),
             input_for_optimizations,
             use_streaming: self.use_streaming,
-            required_input_ordering: None,
+            required_input_ordering: new_required_input_ordering,
         }
     }
 
