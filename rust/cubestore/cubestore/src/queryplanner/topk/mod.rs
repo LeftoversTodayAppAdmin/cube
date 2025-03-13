@@ -166,7 +166,11 @@ impl UserDefinedLogicalNode for ClusterAggregateTopK {
             .chain(&self.aggregate_expr)
             .cloned()
             .collect_vec();
-        if self.having_expr.is_some() {
+        // TODO upgrade DF: DF's type_coercion analysis pass doesn't like these exprs (which are
+        // defined on the aggregate's output schema instead of the input schema).  Maybe we should
+        // split ClusterAggregateTopK into separate logical nodes.  Omitting having_expr is a bit of
+        // a hack...
+        if false && self.having_expr.is_some() {
             res.push(self.having_expr.clone().unwrap());
         }
         res
@@ -187,14 +191,16 @@ impl UserDefinedLogicalNode for ClusterAggregateTopK {
     ) -> datafusion::common::Result<Arc<dyn UserDefinedLogicalNode>> {
         let num_groups = self.group_expr.len();
         let num_aggs = self.aggregate_expr.len();
-        let num_having = if self.having_expr.is_some() { 1 } else { 0 };
+        // TODO upgrade DF: See expressions() comment -- we make the having expressions be "invisible" because they're defined on the output schema.
+        // let num_having = if self.having_expr.is_some() { 1 } else { 0 };
         assert_eq!(inputs.len(), 1);
-        assert_eq!(exprs.len(), num_groups + num_aggs + num_having);
-        let having_expr = if self.having_expr.is_some() {
-            exprs.last().map(|p| p.clone())
-        } else {
-            None
-        };
+        assert_eq!(exprs.len(), num_groups + num_aggs /* + num_having */);  // TODO upgrade DF
+        // let having_expr = if self.having_expr.is_some() {
+        //     exprs.last().map(|p| p.clone())
+        // } else {
+        //     None
+        // };
+        let having_expr = self.having_expr.clone();  // TODO upgrade DF
         Ok(Arc::new(ClusterAggregateTopK {
             limit: self.limit,
             input: Arc::new(inputs[0].clone()),
