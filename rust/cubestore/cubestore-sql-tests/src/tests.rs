@@ -4168,19 +4168,19 @@ async fn planning_topk_hll(service: Box<dyn SqlClient>) {
     show_hints.show_filters = true;
     assert_eq!(
         pp_phys_plan(p.worker.as_ref()),
-        "Projection, [url, CARDINALITY(MERGE(Data.hits)@1):hits]\
-         \n  AggregateTopK, limit: 3\
-         \n    Worker\
-         \n      Sort\
-         \n        FullInplaceAggregate\
-         \n          MergeSort\
-         \n            Union\
-         \n              MergeSort\
-         \n                Scan, index: default:1:[1]:sort_on[url], fields: *\
-         \n                  Empty\
-         \n              MergeSort\
-         \n                Scan, index: default:2:[2]:sort_on[url], fields: *\
-         \n                  Empty"
+        "Projection, [url, cardinality(merge(Data.hits)@1):hits]\
+        \n  AggregateTopKExec\
+        \n    Worker\
+        \n      Sort\
+        \n        SortedSingleAggregate\
+        \n          MergeSort\
+        \n            Union\
+        \n              Scan, index: default:1:[1]:sort_on[url], fields: *\
+        \n                Sort\
+        \n                  Empty\
+        \n              Scan, index: default:2:[2]:sort_on[url], fields: *\
+        \n                Sort\
+        \n                  Empty"
     );
 
     let p = service
