@@ -1749,7 +1749,7 @@ impl WorkerExec {
         required_input_ordering: Option<LexRequirement>,
     ) -> WorkerExec {
         // TODO upgrade DF: Use partitions_num parameter.
-        let partitions_num = 1;  // TODO upgrade DF: No.
+        let partitions_num = 2;  // TODO upgrade DF: No.
         let properties = input.properties().clone().with_partitioning(Partitioning::UnknownPartitioning(partitions_num));
         WorkerExec {
             input,
@@ -1805,8 +1805,7 @@ impl ExecutionPlan for WorkerExec {
     }
 
     fn properties(&self) -> &PlanProperties {
-        // TODO upgrade DF: No.
-        self.input.properties()
+        &self.properties
     }
 
     fn required_input_distribution(&self) -> Vec<Distribution> {
