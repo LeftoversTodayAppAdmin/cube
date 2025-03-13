@@ -4093,18 +4093,18 @@ async fn planning_topk_having(service: Box<dyn SqlClient>) {
     show_hints.show_filters = true;
     assert_eq!(
         pp_phys_plan_ext(p.worker.as_ref(), &show_hints),
-        "Projection, [url, SUM(Data.hits)@1:hits]\
-        \n  AggregateTopK, limit: 3, having: SUM(Data.hits)@1 > 10\
+        "Projection, [url, sum(Data.hits)@1:hits]\
+        \n  AggregateTopKExec\
         \n    Worker\
         \n      Sort\
-        \n        FullInplaceAggregate\
+        \n        SortedSingleAggregate\
         \n          MergeSort\
         \n            Union\
-        \n              MergeSort\
-        \n                Scan, index: default:1:[1]:sort_on[url], fields: [url, hits]\
+        \n              Scan, index: default:1:[1]:sort_on[url], fields: [url, hits]\
+        \n                Sort\
         \n                  Empty\
-        \n              MergeSort\
-        \n                Scan, index: default:2:[2]:sort_on[url], fields: [url, hits]\
+        \n              Scan, index: default:2:[2]:sort_on[url], fields: [url, hits]\
+        \n                Sort\
         \n                  Empty"
     );
 
@@ -4121,20 +4121,19 @@ async fn planning_topk_having(service: Box<dyn SqlClient>) {
     show_hints.show_filters = true;
     assert_eq!(
         pp_phys_plan_ext(p.worker.as_ref(), &show_hints),
-        "Projection, [url, hits, CARDINALITY(MERGE(Data.uhits)@2):uhits]\
-        \n  Projection, [url, SUM(Data.hits)@1:hits, MERGE(Data.uhits)@2:MERGE(uhits)]\
-        \n    AggregateTopK, limit: 3, having: SUM(Data.hits)@1 > 10 AND CAST(CARDINALITY(MERGE(Data.uhits)@2) AS Int64) > 5\
-        \n      Worker\
-        \n        Sort\
-        \n          FullInplaceAggregate\
-        \n            MergeSort\
-        \n              Union\
-        \n                MergeSort\
-        \n                  Scan, index: default:1:[1]:sort_on[url], fields: *\
-        \n                    Empty\
-        \n                MergeSort\
-        \n                  Scan, index: default:2:[2]:sort_on[url], fields: *\
-        \n                    Empty"
+        "Projection, [url, sum(Data.hits)@1:hits, cardinality(merge(Data.uhits)@2):uhits]\
+        \n  AggregateTopKExec\
+        \n    Worker\
+        \n      Sort\
+        \n        SortedSingleAggregate\
+        \n          MergeSort\
+        \n            Union\
+        \n              Scan, index: default:1:[1]:sort_on[url], fields: *\
+        \n                Sort\
+        \n                  Empty\
+        \n              Scan, index: default:2:[2]:sort_on[url], fields: *\
+        \n                Sort\
+        \n                  Empty"
         );
     // Checking execution because the column name MERGE(Data.uhits) in the top projection in the
     // above assertion seems incorrect, but the column number is correct.
