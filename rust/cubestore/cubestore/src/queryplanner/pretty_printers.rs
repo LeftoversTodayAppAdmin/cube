@@ -50,20 +50,34 @@ pub struct PPOptions {
     pub show_filters: bool,
     pub show_sort_by: bool,
     pub show_aggregations: bool,
+    // TODO: Maybe prettify output, name this show_schema.
+    pub debug_schema: bool,
     // Applies only to physical plan.
     pub show_output_hints: bool,
     pub show_check_memory_nodes: bool,
 }
 
 impl PPOptions {
-    pub fn everything() -> PPOptions {
+    pub fn not_everything() -> PPOptions {
         PPOptions {
             show_filters: true,
             show_sort_by: true,
             show_aggregations: true,
+            debug_schema: false,
             show_output_hints: true,
             show_check_memory_nodes: true,
         }
+    }
+
+    pub fn truly_everything() -> PPOptions {
+        PPOptions {
+            debug_schema: true,
+            ..PPOptions::not_everything()
+        }
+    }
+
+    pub fn none() -> PPOptions {
+        PPOptions::default()
     }
 }
 
@@ -306,6 +320,10 @@ pub fn pp_plan_ext(p: &LogicalPlan, opts: &PPOptions) -> String {
                 LogicalPlan::RecursiveQuery(_) => {
                     self.output += "RecursiveQuery";
                 }
+            }
+
+            if self.opts.debug_schema {
+                self.output += &format!(", debug_schema: {:?}", plan.schema());
             }
 
             self.level += 1;
@@ -643,6 +661,10 @@ fn pp_phys_plan_indented(p: &dyn ExecutionPlan, indent: usize, o: &PPOptions, ou
                     *out += &format!(", sort_order: [..., len = {}]", so.len());
                 }
             }
+        }
+
+        if o.debug_schema {
+            *out += &format!(", debug_schema: {:?}", p.schema());
         }
     }
 }

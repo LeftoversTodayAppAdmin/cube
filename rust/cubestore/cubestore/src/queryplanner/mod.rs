@@ -167,6 +167,7 @@ impl QueryPlanner for QueryPlannerImpl {
                     show_aggregations: true,
                     show_output_hints: true,
                     show_check_memory_nodes: false,
+                    ..PPOptions::none()
                 }
             )
         );
@@ -182,6 +183,7 @@ impl QueryPlanner for QueryPlannerImpl {
                     show_aggregations: true,
                     show_output_hints: true,
                     show_check_memory_nodes: false,
+                    ..PPOptions::none()
                 }
             )
         );
