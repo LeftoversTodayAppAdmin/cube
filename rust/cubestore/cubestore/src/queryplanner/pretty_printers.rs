@@ -30,7 +30,7 @@ use crate::queryplanner::query_executor::{
 use crate::queryplanner::rolling::RollingWindowAggregate;
 use crate::queryplanner::serialized_plan::{IndexSnapshot, RowRange};
 use crate::queryplanner::tail_limit::TailLimitExec;
-use crate::queryplanner::topk::ClusterAggregateTopK;
+use crate::queryplanner::topk::{AggregateTopKExec, ClusterAggregateTopK};
 use crate::queryplanner::topk::SortColumn;
 use crate::queryplanner::trace_data_loaded::TraceDataLoadedExec;
 use crate::queryplanner::{CubeTableLogical, InfoSchemaTableProvider};
@@ -375,7 +375,6 @@ fn pp_source(t: Arc<dyn TableProvider>) -> String {
     }
 }
 
-// TODO upgrade DF: No pub
 pub fn pp_sort_columns(first_agg: usize, cs: &[SortColumn]) -> String {
     format!(
         "[{}]",
@@ -532,23 +531,22 @@ fn pp_phys_plan_indented(p: &dyn ExecutionPlan, indent: usize, o: &PPOptions, ou
                     })
                     .join(", ")
             );
-            // TODO upgrade DF <-
-            // } else if let Some(topk) = a.downcast_ref::<AggregateTopKExec>() {
-            //     *out += &format!("AggregateTopK, limit: {:?}", topk.limit);
-            //     if o.show_aggregations {
-            //         *out += &format!(", aggs: {:?}", topk.agg_expr);
-            //     }
-            //     if o.show_sort_by {
-            //         *out += &format!(
-            //             ", sortBy: {}",
-            //             pp_sort_columns(topk.key_len, &topk.order_by)
-            //         );
-            //     }
-            //     if o.show_filters {
-            //         if let Some(having) = &topk.having {
-            //             *out += &format!(", having: {}", having);
-            //         }
-            //     }
+        } else if let Some(topk) = a.downcast_ref::<AggregateTopKExec>() {
+            *out += &format!("AggregateTopK, limit: {:?}", topk.limit);
+            if o.show_aggregations {
+                *out += &format!(", aggs: {:?}", topk.agg_expr);
+            }
+            if o.show_sort_by {
+                *out += &format!(
+                    ", sortBy: {}",
+                    pp_sort_columns(topk.key_len, &topk.order_by)
+                );
+            }
+            if o.show_filters {
+                if let Some(having) = &topk.having {
+                    *out += &format!(", having: {}", having);
+                }
+            }
         } else if let Some(_) = a.downcast_ref::<PanicWorkerExec>() {
             *out += "PanicWorker";
         } else if let Some(_) = a.downcast_ref::<WorkerExec>() {

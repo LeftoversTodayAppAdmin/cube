@@ -2044,11 +2044,11 @@ pub mod tests {
             &indices,
         );
         let plan = choose_index(plan, &indices).await.unwrap().0;
+
         assert_eq!(
             pretty_printers::pp_plan(&plan),
-            "Projection, [s.Orders.order_customer, SUM(s.Orders.order_amount)]\
-           \n  ClusterAggregateTopK, limit: 10\
-           \n    Scan s.Orders, source: CubeTable(index: by_customer:3:[]:sort_on[order_customer]), fields: [order_customer, order_amount]"
+            "ClusterAggregateTopK, limit: 10\
+           \n  Scan s.orders, source: CubeTable(index: by_customer:3:[]:sort_on[order_customer]), fields: [order_customer, order_amount]"
         );
 
         // Projections should be handled properly.
@@ -2062,7 +2062,7 @@ pub mod tests {
             pretty_printers::pp_plan(&plan),
             "Projection, [customer, amount]\
            \n  ClusterAggregateTopK, limit: 10\
-           \n    Scan s.Orders, source: CubeTable(index: by_customer:3:[]:sort_on[order_customer]), fields: [order_customer, order_amount]"
+           \n    Scan s.orders, source: CubeTable(index: by_customer:3:[]:sort_on[order_customer]), fields: [order_customer, order_amount]"
         );
 
         let plan = initial_plan(
@@ -2077,7 +2077,7 @@ pub mod tests {
             pretty_printers::pp_plan_ext(&plan, &with_sort_by),
             "Projection, [amount, customer]\
            \n  ClusterAggregateTopK, limit: 10, sortBy: [2 desc null last]\
-           \n    Scan s.Orders, source: CubeTable(index: by_customer:3:[]:sort_on[order_customer]), fields: [order_customer, order_amount]"
+           \n    Scan s.orders, source: CubeTable(index: by_customer:3:[]:sort_on[order_customer]), fields: [order_customer, order_amount]"
         );
 
         // Ascending order is also ok.
