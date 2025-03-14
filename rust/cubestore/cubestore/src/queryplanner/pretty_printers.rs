@@ -532,7 +532,7 @@ fn pp_phys_plan_indented(p: &dyn ExecutionPlan, indent: usize, o: &PPOptions, ou
                     })
                     .join(", ")
             );
-            // TODO upgrade DF
+            // TODO upgrade DF <-
             // } else if let Some(topk) = a.downcast_ref::<AggregateTopKExec>() {
             //     *out += &format!("AggregateTopK, limit: {:?}", topk.limit);
             //     if o.show_aggregations {

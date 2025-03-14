@@ -34,7 +34,7 @@ use itertools::{EitherOrBoth, Itertools};
 
 use super::serialized_plan::PreSerializedPlan;
 use super::topk::{materialize_topk, ClusterAggregateTopKSerialized};
-use crate::cluster::Cluster;
+use crate::cluster::{Cluster, WorkerPlanningParams};
 use crate::metastore::multi_index::MultiPartition;
 use crate::metastore::table::{Table, TablePath};
 use crate::metastore::{
@@ -1612,6 +1612,8 @@ fn pull_up_cluster_send(mut p: LogicalPlan) -> Result<LogicalPlan, DataFusionErr
 
 pub struct CubeExtensionPlanner {
     pub cluster: Option<Arc<dyn Cluster>>,
+    // Set on the workers.
+    pub worker_planning_params: Option<WorkerPlanningParams>,
     pub serialized_plan: Arc<PreSerializedPlan>,
 }
 
@@ -1693,7 +1695,7 @@ impl ExtensionPlanner for CubeExtensionPlanner {
 impl CubeExtensionPlanner {
     pub fn plan_cluster_send(
         &self,
-        mut input: Arc<dyn ExecutionPlan>,
+        input: Arc<dyn ExecutionPlan>,
         snapshots: &Vec<Snapshots>,
         use_streaming: bool,
         max_batch_rows: usize,
@@ -1719,12 +1721,13 @@ impl CubeExtensionPlanner {
                 required_input_ordering,
             )?))
         } else {
+            let worker_planning_params = self.worker_planning_params.expect("cluster_send_partition_count must be set when CubeExtensionPlanner::cluster is None");
             Ok(Arc::new(WorkerExec::new(
                 input,
                 max_batch_rows,
                 limit_and_reverse,
                 required_input_ordering,
-
+                worker_planning_params,
             )))
         }
     }
@@ -1747,10 +1750,9 @@ impl WorkerExec {
         max_batch_rows: usize,
         limit_and_reverse: Option<(usize, bool)>,
         required_input_ordering: Option<LexRequirement>,
+        worker_planning_params: WorkerPlanningParams,
     ) -> WorkerExec {
-        // TODO upgrade DF: Use partitions_num parameter.
-        let partitions_num = 2;  // TODO upgrade DF: No.
-        let properties = input.properties().clone().with_partitioning(Partitioning::UnknownPartitioning(partitions_num));
+        let properties = input.properties().clone().with_partitioning(Partitioning::UnknownPartitioning(worker_planning_params.worker_partition_count));
         WorkerExec {
             input,
             max_batch_rows,

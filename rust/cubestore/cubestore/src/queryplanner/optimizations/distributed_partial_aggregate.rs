@@ -1,3 +1,4 @@
+use crate::cluster::WorkerPlanningParams;
 use crate::queryplanner::planning::WorkerExec;
 use crate::queryplanner::query_executor::ClusterSendExec;
 use crate::queryplanner::tail_limit::TailLimitExec;
@@ -70,6 +71,7 @@ pub fn push_aggregate_to_workers(
             w.max_batch_rows,
             w.limit_and_reverse.clone(),
             p_final_agg.required_input_ordering().into_iter().next().unwrap(),
+            WorkerPlanningParams { worker_partition_count: w.properties().output_partitioning().partition_count() },
         ))
     } else {
         return Ok(p_final);

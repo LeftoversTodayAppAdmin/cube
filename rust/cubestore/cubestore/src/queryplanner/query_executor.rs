@@ -1,4 +1,4 @@
-use crate::cluster::{pick_worker_by_ids, pick_worker_by_partitions, Cluster};
+use crate::cluster::{pick_worker_by_ids, pick_worker_by_partitions, Cluster, WorkerPlanningParams};
 use crate::config::injection::DIService;
 use crate::config::ConfigObj;
 use crate::metastore::multi_index::MultiPartition;
@@ -13,6 +13,7 @@ use crate::queryplanner::planning::{get_worker_plan, Snapshot, Snapshots};
 use crate::queryplanner::pretty_printers::{pp_phys_plan, pp_plan};
 use crate::queryplanner::serialized_plan::{IndexSnapshot, RowFilter, RowRange, SerializedPlan};
 use crate::queryplanner::trace_data_loaded::DataLoadedSize;
+use crate::sql::SqlServiceImpl;
 use crate::store::DataFrame;
 use crate::table::data::rows_to_columns;
 use crate::table::parquet::CubestoreParquetMetadataCache;
@@ -111,6 +112,7 @@ pub trait QueryExecutor: DIService + Send + Sync {
     async fn execute_worker_plan(
         &self,
         plan: SerializedPlan,
+        worker_planning_params: WorkerPlanningParams,
         remote_to_local_names: HashMap<String, String>,
         chunk_id_to_record_batches: HashMap<u64, Vec<RecordBatch>>,
     ) -> Result<(SchemaRef, Vec<RecordBatch>, usize), CubeError>;
@@ -124,6 +126,7 @@ pub trait QueryExecutor: DIService + Send + Sync {
     async fn worker_plan(
         &self,
         plan: SerializedPlan,
+        worker_planning_params: WorkerPlanningParams,
         remote_to_local_names: HashMap<String, String>,
         chunk_id_to_record_batches: HashMap<u64, Vec<RecordBatch>>,
         data_loaded_size: Option<Arc<DataLoadedSize>>,
@@ -132,6 +135,7 @@ pub trait QueryExecutor: DIService + Send + Sync {
     async fn pp_worker_plan(
         &self,
         plan: SerializedPlan,
+        worker_planning_params: WorkerPlanningParams,
         remote_to_local_names: HashMap<String, String>,
         chunk_id_to_record_batches: HashMap<u64, Vec<RecordBatch>>,
     ) -> Result<String, CubeError>;
@@ -220,6 +224,7 @@ impl QueryExecutor for QueryExecutorImpl {
     async fn execute_worker_plan(
         &self,
         plan: SerializedPlan,
+        worker_planning_params: WorkerPlanningParams,
         remote_to_local_names: HashMap<String, String>,
         chunk_id_to_record_batches: HashMap<u64, Vec<RecordBatch>>,
     ) -> Result<(SchemaRef, Vec<RecordBatch>, usize), CubeError> {
@@ -227,6 +232,7 @@ impl QueryExecutor for QueryExecutorImpl {
         let (physical_plan, logical_plan) = self
             .worker_plan(
                 plan,
+                worker_planning_params,
                 remote_to_local_names,
                 chunk_id_to_record_batches,
                 Some(data_loaded_size.clone()),
@@ -304,6 +310,10 @@ impl QueryExecutor for QueryExecutorImpl {
         )?;
         let pre_serialized_plan = Arc::new(pre_serialized_plan);
         let ctx = self.router_context(cluster.clone(), pre_serialized_plan.clone())?;
+        let router_plan = ctx.clone()
+            .state()
+            .create_physical_plan(pre_serialized_plan.logical_plan())
+            .await?;
         Ok((
             ctx.clone()
                 .state()
@@ -316,6 +326,7 @@ impl QueryExecutor for QueryExecutorImpl {
     async fn worker_plan(
         &self,
         plan: SerializedPlan,
+        worker_planning_params: WorkerPlanningParams,
         remote_to_local_names: HashMap<String, String>,
         chunk_id_to_record_batches: HashMap<u64, Vec<RecordBatch>>,
         data_loaded_size: Option<Arc<DataLoadedSize>>,
@@ -326,7 +337,7 @@ impl QueryExecutor for QueryExecutorImpl {
             self.parquet_metadata_cache.cache().clone(),
         )?;
         let pre_serialized_plan = Arc::new(pre_serialized_plan);
-        let ctx = self.worker_context(pre_serialized_plan.clone(), data_loaded_size)?;
+        let ctx = self.worker_context(pre_serialized_plan.clone(), worker_planning_params, data_loaded_size)?;
         let plan_ctx = ctx.clone();
         Ok((
             plan_ctx
@@ -340,12 +351,14 @@ impl QueryExecutor for QueryExecutorImpl {
     async fn pp_worker_plan(
         &self,
         plan: SerializedPlan,
+        worker_planning_params: WorkerPlanningParams,
         remote_to_local_names: HashMap<String, String>,
         chunk_id_to_record_batches: HashMap<u64, Vec<RecordBatch>>,
     ) -> Result<String, CubeError> {
         let (physical_plan, _) = self
             .worker_plan(
                 plan,
+                worker_planning_params,
                 remote_to_local_names,
                 chunk_id_to_record_batches,
                 None,
@@ -435,6 +448,7 @@ impl QueryExecutorImpl {
     fn worker_context(
         &self,
         serialized_plan: Arc<PreSerializedPlan>,
+        worker_planning_params: WorkerPlanningParams,
         data_loaded_size: Option<Arc<DataLoadedSize>>,
     ) -> Result<Arc<SessionContext>, CubeError> {
         let runtime = Arc::new(RuntimeEnv::default());
@@ -445,6 +459,7 @@ impl QueryExecutorImpl {
             .with_default_features()
             .with_query_planner(Arc::new(CubeQueryPlanner::new_on_worker(
                 serialized_plan,
+                worker_planning_params,
                 self.memory_handler.clone(),
                 data_loaded_size.clone(),
             )))
@@ -1295,6 +1310,13 @@ impl ClusterSendExec {
         )
     }
 
+    pub fn worker_planning_params(&self) -> WorkerPlanningParams {
+        WorkerPlanningParams {
+            // Or, self.partitions.len().
+            worker_partition_count: self.properties().output_partitioning().partition_count(),
+        }
+    }
+
     pub(crate) fn distribute_to_workers(
         config: &dyn ConfigObj,
         snapshots: &[Snapshots],
@@ -1596,11 +1618,12 @@ impl ExecutionPlan for ClusterSendExec {
         let cluster = self.cluster.clone();
         let schema = self.properties.eq_properties.schema().clone();
         let node_name = node_name.to_string();
+        let worker_planning_params = self.worker_planning_params();
         if self.use_streaming {
             // A future that yields a stream
             let fut = async move {
                 cluster
-                    .run_select_stream(&node_name, plan.to_serialized_plan()?)
+                    .run_select_stream(&node_name, plan.to_serialized_plan()?, worker_planning_params)
                     .await
             };
             // Use TryStreamExt::try_flatten to flatten the stream of streams
@@ -1610,7 +1633,7 @@ impl ExecutionPlan for ClusterSendExec {
         } else {
             let record_batches = async move {
                 cluster
-                    .run_select(&node_name, plan.to_serialized_plan()?)
+                    .run_select(&node_name, plan.to_serialized_plan()?, worker_planning_params)
                     .await
             };
             let stream = futures::stream::once(record_batches).flat_map(|r| match r {
