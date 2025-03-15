@@ -3122,7 +3122,7 @@ async fn planning_inplace_aggregate2(service: Box<dyn SqlClient>) {
                                AND (`day` >= to_timestamp('2021-01-01T00:00:00.000') \
                                 AND `day` <= to_timestamp('2021-01-02T23:59:59.999')) \
                          GROUP BY 1 \
-                         ORDER BY 2 DESC \
+                         ORDER BY 2 DESC NULLS LAST \
                          LIMIT 10",
         )
         .await
@@ -3133,7 +3133,7 @@ async fn planning_inplace_aggregate2(service: Box<dyn SqlClient>) {
     verbose.show_sort_by = true;
     assert_eq!(
         pp_phys_plan_ext(p.router.as_ref(), &verbose),
-        "Projection, [url, SUM(Data.hits)@1:hits]\
+        "Projection, [url, sum(Data.hits)@1:hits]\
            \n  AggregateTopK, limit: 10, sortBy: [2 desc null last]\
            \n    ClusterSend, partitions: [[1, 2]], sort_order: [1]"
     );
