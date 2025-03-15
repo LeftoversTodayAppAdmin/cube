@@ -2,6 +2,7 @@ mod execute;
 mod plan;
 mod util;
 
+use datafusion::error::DataFusionError;
 use datafusion::execution::FunctionRegistry;
 use datafusion_proto::bytes::Serializeable;
 pub use execute::AggregateTopKExec;
@@ -168,12 +169,41 @@ impl UserDefinedLogicalNode for ClusterAggregateTopK {
             .collect_vec();
         // TODO upgrade DF: DF's type_coercion analysis pass doesn't like these exprs (which are
         // defined on the aggregate's output schema instead of the input schema).  Maybe we should
-        // split ClusterAggregateTopK into separate logical nodes.  Omitting having_expr is a bit of
-        // a hack...
+        // split ClusterAggregateTopK into separate logical nodes.  Instead we (hackishly) use
+        // upper_expressions.
         if false && self.having_expr.is_some() {
             res.push(self.having_expr.clone().unwrap());
         }
         res
+    }
+
+    // Cube extension.
+    fn upper_expressions(&self) -> Vec<Expr> {
+        if let Some(e) = &self.having_expr {
+            vec![e.clone()]
+        } else {
+            vec![]
+        }
+    }
+
+    // Cube extension.
+    fn with_upper_expressions(&self, upper_exprs: Vec<Expr>) -> Result<Option<Arc<dyn UserDefinedLogicalNode>>, DataFusionError> {
+        assert_eq!(usize::from(self.having_expr.is_some()), upper_exprs.len());
+        if self.having_expr.is_some() {
+            let having_expr = Some(upper_exprs.into_iter().next().unwrap());
+            Ok(Some(Arc::new(ClusterAggregateTopK {
+                limit: self.limit,
+                input: self.input.clone(),
+                group_expr: self.group_expr.clone(),
+                aggregate_expr: self.aggregate_expr.clone(),
+                order_by: self.order_by.clone(),
+                having_expr,
+                schema: self.schema.clone(),
+                snapshots: self.snapshots.clone(),
+            })))
+        } else {
+            Ok(None)
+        }
     }
 
     fn fmt_for_explain<'a>(&self, f: &mut Formatter<'a>) -> std::fmt::Result {
@@ -188,10 +218,14 @@ impl UserDefinedLogicalNode for ClusterAggregateTopK {
         &self,
         exprs: Vec<Expr>,
         inputs: Vec<LogicalPlan>,
-    ) -> datafusion::common::Result<Arc<dyn UserDefinedLogicalNode>> {
+    ) -> Result<Arc<dyn UserDefinedLogicalNode>, DataFusionError> {
         let num_groups = self.group_expr.len();
         let num_aggs = self.aggregate_expr.len();
-        // TODO upgrade DF: See expressions() comment -- we make the having expressions be "invisible" because they're defined on the output schema.
+
+        // TODO upgrade DF: See expressions() comment; having_expr is part of the
+        // upper_expressions() -- we make the having expressions be "invisible" because they're
+        // defined on the output schema.
+
         // let num_having = if self.having_expr.is_some() { 1 } else { 0 };
         assert_eq!(inputs.len(), 1);
         assert_eq!(exprs.len(), num_groups + num_aggs /* + num_having */);  // TODO upgrade DF
@@ -200,7 +234,7 @@ impl UserDefinedLogicalNode for ClusterAggregateTopK {
         // } else {
         //     None
         // };
-        let having_expr = self.having_expr.clone();  // TODO upgrade DF
+        let having_expr = self.having_expr.clone();
         Ok(Arc::new(ClusterAggregateTopK {
             limit: self.limit,
             input: Arc::new(inputs[0].clone()),
