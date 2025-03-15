@@ -2099,7 +2099,7 @@ pub mod tests {
             "SELECT order_customer `customer`, SUM(order_amount) `amount`, \
                     MIN(order_amount) `min_amount`, MAX(order_amount) `max_amount` \
              FROM s.orders \
-             GROUP BY 1 ORDER BY 3 DESC, 2 ASC LIMIT 10",
+             GROUP BY 1 ORDER BY 3 DESC NULLS LAST, 2 ASC LIMIT 10",
             &indices,
         );
         let mut verbose = with_sort_by;
@@ -2108,7 +2108,7 @@ pub mod tests {
         assert_eq!(
             pretty_printers::pp_plan_ext(&plan, &verbose),
             "Projection, [customer, amount, min_amount, max_amount]\
-           \n  ClusterAggregateTopK, limit: 10, aggs: [SUM(#s.orders.order_amount), MIN(#s.orders.order_amount), MAX(#s.orders.order_amount)], sortBy: [3 desc null last, 2 null last]\
+           \n  ClusterAggregateTopK, limit: 10, aggs: [sum(s.orders.order_amount), min(s.orders.order_amount), max(s.orders.order_amount)], sortBy: [3 desc null last, 2 null last]\
            \n    Scan s.orders, source: CubeTable(index: by_customer:3:[]:sort_on[order_customer]), fields: [order_customer, order_amount]"
         );
 

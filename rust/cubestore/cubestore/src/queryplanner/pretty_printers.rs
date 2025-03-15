@@ -15,6 +15,7 @@ use datafusion::physical_plan::coalesce_partitions::CoalescePartitionsExec;
 use datafusion::physical_plan::filter::FilterExec;
 use datafusion::physical_plan::limit::{GlobalLimitExec, LocalLimitExec};
 use datafusion::physical_plan::{ExecutionPlan, InputOrderMode, PlanProperties};
+use datafusion::prelude::Expr;
 use itertools::{repeat_n, Itertools};
 use std::sync::Arc;
 
@@ -251,7 +252,7 @@ pub fn pp_plan_ext(p: &LogicalPlan, opts: &PPOptions) -> String {
                     {
                         self.output += &format!("ClusterAggregateTopK, limit: {}", topk.limit);
                         if self.opts.show_aggregations {
-                            self.output += &format!(", aggs: {:?}", topk.aggregate_expr)
+                            self.output += &format!(", aggs: {}", pp_exprs(&topk.aggregate_expr))
                         }
                         if self.opts.show_sort_by {
                             self.output += &format!(
@@ -681,4 +682,8 @@ fn pp_row_range(r: &RowRange) -> String {
         Some(e) => format!("{:?}", e.values()),
     };
     format!("[{},{})", s, e)
+}
+
+fn pp_exprs(v: &Vec<Expr>) -> String {
+    "[".to_owned() + &v.iter().map(|e: &Expr| format!("{}", e)).join(", ") + "]"
 }
