@@ -4140,6 +4140,7 @@ async fn planning_topk_having(service: Box<dyn SqlClient>) {
     let result = service.exec_query(query).await.unwrap();
     assert_eq!(result.len(), 0);
 }
+
 async fn planning_topk_hll(service: Box<dyn SqlClient>) {
     service.exec_query("CREATE SCHEMA s").await.unwrap();
     service
