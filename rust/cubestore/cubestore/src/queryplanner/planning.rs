@@ -2054,7 +2054,7 @@ pub mod tests {
         // Projections should be handled properly.
         let plan = initial_plan(
             "SELECT order_customer `customer`, SUM(order_amount) `amount` FROM s.Orders \
-             GROUP BY 1 ORDER BY 2 DESC LIMIT 10",
+             GROUP BY 1 ORDER BY 2 DESC NULLS LAST LIMIT 10",
             &indices,
         );
         let plan = choose_index(plan, &indices).await.unwrap().0;
@@ -2067,7 +2067,7 @@ pub mod tests {
 
         let plan = initial_plan(
             "SELECT SUM(order_amount) `amount`, order_customer `customer` FROM s.Orders \
-             GROUP BY 2 ORDER BY 1 DESC LIMIT 10",
+             GROUP BY 2 ORDER BY 1 DESC NULLS LAST LIMIT 10",
             &indices,
         );
         let plan = choose_index(plan, &indices).await.unwrap().0;
@@ -2091,14 +2091,14 @@ pub mod tests {
             pretty_printers::pp_plan_ext(&plan, &with_sort_by),
             "Projection, [customer, amount]\
            \n  ClusterAggregateTopK, limit: 10, sortBy: [2 null last]\
-           \n    Scan s.Orders, source: CubeTable(index: by_customer:3:[]:sort_on[order_customer]), fields: [order_customer, order_amount]"
+           \n    Scan s.orders, source: CubeTable(index: by_customer:3:[]:sort_on[order_customer]), fields: [order_customer, order_amount]"
         );
 
         // MAX and MIN are ok, as well as multiple aggregation.
         let plan = initial_plan(
             "SELECT order_customer `customer`, SUM(order_amount) `amount`, \
                     MIN(order_amount) `min_amount`, MAX(order_amount) `max_amount` \
-             FROM s.Orders \
+             FROM s.orders \
              GROUP BY 1 ORDER BY 3 DESC, 2 ASC LIMIT 10",
             &indices,
         );
@@ -2108,8 +2108,8 @@ pub mod tests {
         assert_eq!(
             pretty_printers::pp_plan_ext(&plan, &verbose),
             "Projection, [customer, amount, min_amount, max_amount]\
-           \n  ClusterAggregateTopK, limit: 10, aggs: [SUM(#s.Orders.order_amount), MIN(#s.Orders.order_amount), MAX(#s.Orders.order_amount)], sortBy: [3 desc null last, 2 null last]\
-           \n    Scan s.Orders, source: CubeTable(index: by_customer:3:[]:sort_on[order_customer]), fields: [order_customer, order_amount]"
+           \n  ClusterAggregateTopK, limit: 10, aggs: [SUM(#s.orders.order_amount), MIN(#s.orders.order_amount), MAX(#s.orders.order_amount)], sortBy: [3 desc null last, 2 null last]\
+           \n    Scan s.orders, source: CubeTable(index: by_customer:3:[]:sort_on[order_customer]), fields: [order_customer, order_amount]"
         );
 
         // Should not introduce TopK by mistake in unsupported cases.
