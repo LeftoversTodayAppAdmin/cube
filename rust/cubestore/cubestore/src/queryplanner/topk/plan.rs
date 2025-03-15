@@ -246,7 +246,9 @@ struct ColumnProjection<'a> {
 }
 
 fn extract_having(p: &Arc<LogicalPlan>) -> (Option<Expr>, &Arc<LogicalPlan>) {
-    // TODO upgrade DF: Filter now has a "having" clause.
+    // Filter's "having" flag is not relevant to us.  It is used by DF to get the proper wildcard
+    // expansion behavior in the analysis pass (before LogicalPlan optimizations, and before we
+    // materialize the topk node here).
     match p.as_ref() {
         LogicalPlan::Filter(Filter { predicate, input, having: _, .. }) => (Some(predicate.clone()), input),
         _ => (None, p),
