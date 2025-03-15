@@ -151,7 +151,7 @@ pub fn pp_plan_ext(p: &LogicalPlan, opts: &PPOptions) -> String {
                 LogicalPlan::Aggregate(Aggregate { aggr_expr, .. }) => {
                     self.output += "Aggregate";
                     if self.opts.show_aggregations {
-                        self.output += &format!(", aggs: {:?}", aggr_expr)
+                        self.output += &format!(", aggs: {}", pp_exprs(aggr_expr))
                     }
                 }
                 LogicalPlan::Sort(Sort { expr, fetch, .. }) => {

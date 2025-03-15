@@ -4094,7 +4094,7 @@ async fn planning_topk_having(service: Box<dyn SqlClient>) {
     assert_eq!(
         pp_phys_plan_ext(p.worker.as_ref(), &show_hints),
         "Projection, [url, sum(Data.hits)@1:hits]\
-        \n  AggregateTopKExec\
+        \n  AggregateTopK, limit: 3, having: sum(Data.hits)@1 > 10\
         \n    Worker\
         \n      Sort\
         \n        SortedSingleAggregate\
@@ -4122,7 +4122,7 @@ async fn planning_topk_having(service: Box<dyn SqlClient>) {
     assert_eq!(
         pp_phys_plan_ext(p.worker.as_ref(), &show_hints),
         "Projection, [url, sum(Data.hits)@1:hits, cardinality(merge(Data.uhits)@2):uhits]\
-        \n  AggregateTopKExec\
+        \n  AggregateTopK, limit: 3, having: sum(Data.hits)@1 > 10 AND cardinality(merge(Data.uhits)@2) > 5\
         \n    Worker\
         \n      Sort\
         \n        SortedSingleAggregate\
@@ -4168,7 +4168,7 @@ async fn planning_topk_hll(service: Box<dyn SqlClient>) {
     assert_eq!(
         pp_phys_plan(p.worker.as_ref()),
         "Projection, [url, cardinality(merge(Data.hits)@1):hits]\
-        \n  AggregateTopKExec\
+        \n  AggregateTopK, limit: 3\
         \n    Worker\
         \n      Sort\
         \n        SortedSingleAggregate\
