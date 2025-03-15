@@ -187,8 +187,21 @@ pub fn pp_plan_ext(p: &LogicalPlan, opts: &PPOptions) -> String {
                     }
                 }
                 LogicalPlan::EmptyRelation(EmptyRelation { .. }) => self.output += "Empty",
-                LogicalPlan::Limit(Limit { .. }) => self.output += "Limit",
-                // LogicalPlan::Skip(Skip { .. }) => self.output += "Skip",
+                &LogicalPlan::Limit(Limit { skip, fetch, input: _ }) => {
+                    if skip == 0 {
+                        if let Some(_) = fetch {
+                            self.output += "Limit";
+                        } else {
+                            self.output += "Limit infinity";
+                        }
+                    } else {
+                        if let Some(_) = fetch {
+                            self.output += "Skip, Limit";
+                        } else {
+                            self.output += "Skip";
+                        }
+                    }
+                }
                 // LogicalPlan::CreateExternalTable(CreateExternalTable { .. }) => self.output += "CreateExternalTable",
                 LogicalPlan::Explain(Explain { .. }) => self.output += "Explain",
                 LogicalPlan::Extension(Extension { node }) => {
